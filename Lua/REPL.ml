@@ -4,7 +4,7 @@ open Lua_lib.Interpreter
 open Lua_lib.Ast
 include Parser
 
-let print_ast = false
+let print_ast = true
 
 let run_from_string code ctx =
   match parse (Parser.string_to_input code) with

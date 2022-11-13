@@ -110,13 +110,13 @@ end = struct
   (* Parses given sequence of chars*)
   let parse_sequence seq code =
     let rec helper partseq = function
-      | [] -> Failed ("exprected " ^ implode seq)
+      | [] -> Failed ("expected " ^ implode seq)
       | codeh :: t1 ->
         (match partseq with
          | [] -> Parsed (seq, code)
          | seqh :: [] when seqh = codeh -> Parsed (seq, t1)
          | seqh :: t2 when seqh = codeh -> helper t2 t1
-         | _ :: _ -> Failed ("exprected " ^ implode seq))
+         | _ :: _ -> Failed ("expected " ^ implode seq))
     in
     helper seq code
   ;;
@@ -281,9 +281,9 @@ end = struct
   ;;
 
   let parse_specific_keyword kw inp =
-    (s_parse_keyword
+    (wrap s_parse_keyword
     >>= function
-    | Keyword w when w = kw -> return true
+    | Some Keyword w when w = kw -> return true
     | _ -> fail ("Expected " ^ kw))
       inp
   ;;
@@ -369,8 +369,7 @@ end = struct
        | Failed _ | HardFailed _ -> Parsed (b, t)
        | Parsed (v, t1) -> helper v t1
      in
-     helper body t)
-    -/-> "Expected expression")
+     helper body t))
       inp
 
   (* parses expr of a constant
@@ -542,7 +541,7 @@ end = struct
      s_parse_operator
      >>= function
      | Operator "=" -> get_args >>= fun rhs -> return (LuaSet (lhs, rhs))
-     | _ -> fail "assignment expected")
+     | _ -> fail "Expected assignment")
       inp
 
   (* parses if statement *)
@@ -614,7 +613,7 @@ end = struct
     >>= fun stop_ex ->
     wrap (s_parse_comma *> parse_expr)
     >>= fun step_ex ->
-    parse_do_block
+    !!parse_do_block
     >>= fun bl -> return (LuaFornum (vname, start_ex, stop_ex, step_ex, bl)))
       inp
 
@@ -651,10 +650,10 @@ end = struct
 
   (* parses function declare*)
   and parse_function_declare inp =
-    (parse_specific_keyword "function" *> parse_lvalue
+    (parse_specific_keyword "function" *> !!parse_lvalue
     >>= fun name ->
-    s_parse_l_par *> delim_parser ~inner_parser:parse_ident ~sep_parser:s_parse_comma
-    <* s_parse_r_par
+    !!s_parse_l_par *> delim_parser ~inner_parser:parse_ident ~sep_parser:s_parse_comma
+    <* !!s_parse_r_par
     >>= fun args ->
     parse_block parse_end >>= fun body -> return (LuaFunctionDeclare (name, args, body)))
       inp
