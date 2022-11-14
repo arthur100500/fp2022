@@ -453,9 +453,9 @@ end = struct
   (* parse table init {expr, expr, ...}*)
   and parse_table_init inp =
     let parse_kv_pair_or_value =
-      s_parse_l_bracket *> parse_expr
+      (s_parse_l_bracket *> parse_expr
       <* !!s_parse_r_bracket
-      <* parse_assign_op
+      <* parse_assign_op) <|> (parse_ident <* parse_assign_op >>= fun idex -> return (LuaConst(LuaString idex)))
       >>= (fun key -> parse_expr >>= fun value -> return (PairExpr (key, value)))
       <|> (parse_expr >>= fun e -> return (JustExpr e))
     in
