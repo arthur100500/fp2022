@@ -173,15 +173,16 @@ end = struct
      in
      let exec_bool_op ler rer op last_ctx =
        match ler, rer with
-       | x, y -> return { last_ctx with last_exec = LuaBool (op (get_bool x) (get_bool y)) }
+       | x, y ->
+         return { last_ctx with last_exec = LuaBool (op (get_bool x) (get_bool y)) }
      in
-     let exec_eq_op ler rer op last_ctx = 
-      match ler, rer with
-        x, y  -> return { last_ctx with last_exec = LuaBool (op x y) }
+     let exec_eq_op ler rer op last_ctx =
+       match ler, rer with
+       | x, y -> return { last_ctx with last_exec = LuaBool (op x y) }
      in
      let exec_comp_op ler rer op last_ctx =
        match ler, rer with
-       | x,  y -> return { last_ctx with last_exec = LuaBool (op x y) }
+       | x, y -> return { last_ctx with last_exec = LuaBool (op x y) }
      in
      exec_expr le
      >>= fun le_e ->
