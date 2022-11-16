@@ -169,17 +169,19 @@ end = struct
        match ler, rer with
        | LuaString x, LuaString y ->
          return { last_ctx with last_exec = LuaString (op x y) }
-       | _ -> error "Attempt to do math with non numbers"
+       | _ -> error "Attempt to do concatenation with non strings"
      in
      let exec_bool_op ler rer op last_ctx =
        match ler, rer with
-       | LuaBool x, LuaBool y -> return { last_ctx with last_exec = LuaBool (op x y) }
-       | _ -> error "Attempt to do logic with non booleans"
+       | x, y -> return { last_ctx with last_exec = LuaBool (op (get_bool x) (get_bool y)) }
+     in
+     let exec_eq_op ler rer op last_ctx = 
+      match ler, rer with
+        x, y  -> return { last_ctx with last_exec = LuaBool (op x y) }
      in
      let exec_comp_op ler rer op last_ctx =
        match ler, rer with
-       | LuaNumber x, LuaNumber y -> return { last_ctx with last_exec = LuaBool (op x y) }
-       | _ -> error "Attempt to do comparison with non numbers"
+       | x,  y -> return { last_ctx with last_exec = LuaBool (op x y) }
      in
      exec_expr le
      >>= fun le_e ->
@@ -199,8 +201,8 @@ end = struct
      | ">=" -> exec_comp_op ler rer ( >= ) re_e
      | ">" -> exec_comp_op ler rer ( > ) re_e
      | "<" -> exec_comp_op ler rer ( < ) re_e
-     | "==" -> exec_comp_op ler rer ( = ) re_e
-     | "~=" -> exec_comp_op ler rer ( <> ) re_e
+     | "==" -> exec_eq_op ler rer ( = ) re_e
+     | "~=" -> exec_eq_op ler rer ( <> ) re_e
      | ".." -> exec_str_op ler rer ( ^ ) re_e
      | _ -> error "operator is not implemented")
       ctx

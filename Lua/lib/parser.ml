@@ -221,9 +221,25 @@ end = struct
         >>= fun res -> return (Operator (implode res)))
   ;;
 
+  let parse_sequences = function
+    | [] -> fail "Nothing was expected to be parsed"
+    | h :: t -> List.fold_left (fun p1 s -> p1 <|> parse_sequence s) (parse_sequence h) t
+  ;;
+
   (* Parses string*)
   let parse_string ~begin_parser ~end_parser =
-    begin_parser *> parse_many (fail_if_parsed end_parser *> parse_symbol (fun _ -> true))
+    begin_parser
+    *> (parse_sequences (List.map explode [ "\\n"; "\\\""; "\\\'"; "\\[["; "\\" ])
+       <|> parse_many (fail_if_parsed end_parser *> parse_symbol (fun s -> s <> '\n')))
+    <* end_parser
+    >>= fun s -> return (String (implode s))
+  ;;
+
+  (* Parses string*)
+  let parse_ml_string ~begin_parser ~end_parser =
+    begin_parser
+    *> (parse_sequences (List.map explode [ "\\n"; "\\\""; "\\\'"; "\\[["; "\\" ])
+       <|> parse_many (fail_if_parsed end_parser *> parse_symbol (fun _ -> true)))
     <* end_parser
     >>= fun s -> return (String (implode s))
   ;;
@@ -270,7 +286,7 @@ end = struct
     parse_useless_stuff
     >> (parse_string ~begin_parser:(pse "'") ~end_parser:(pse "'")
        <|> parse_string ~begin_parser:(pse "\"") ~end_parser:(pse "\"")
-       <|> parse_string ~begin_parser:(pse "[[") ~end_parser:(pse "]]"))
+       <|> parse_ml_string ~begin_parser:(pse "[[") ~end_parser:(pse "]]"))
   ;;
 
   let s_parse_arithm_operator =
@@ -283,7 +299,7 @@ end = struct
   let parse_specific_keyword kw inp =
     (wrap s_parse_keyword
     >>= function
-    | Some Keyword w when w = kw -> return true
+    | Some (Keyword w) when w = kw -> return true
     | _ -> fail ("Expected " ^ kw))
       inp
   ;;
@@ -358,18 +374,18 @@ end = struct
 
   (* parse expression but not bin op*)
   and parse_primary_expr inp =
-    ((parse_const
-     <|> parse_par_expr
-     <|> parse_var_expr
-     <|> parse_table_init
-     <|> parse_unary_op
-     >>= fun body t ->
-     let rec helper b t =
-       match (parse_func_call b <|> parse_table_access b) t with
-       | Failed _ | HardFailed _ -> Parsed (b, t)
-       | Parsed (v, t1) -> helper v t1
-     in
-     helper body t))
+    (parse_const
+    <|> parse_par_expr
+    <|> parse_var_expr
+    <|> parse_table_init
+    <|> parse_unary_op
+    >>= fun body t ->
+    let rec helper b t =
+      match (parse_func_call b <|> parse_table_access b) t with
+      | Failed _ | HardFailed _ -> Parsed (b, t)
+      | Parsed (v, t1) -> helper v t1
+    in
+    helper body t)
       inp
 
   (* parses expr of a constant
@@ -414,7 +430,7 @@ end = struct
              let lhs = LuaBinOp (op1, lhs, rhs) in
              parse_bin_op_rhs expr_recedence lhs t4
            | Failed m | HardFailed m -> Failed m)
-        | _ -> HardFailed "expected expression after operator")
+        | _ -> HardFailed "Expected expression after operator")
     | _ -> Parsed (lhs, inp)
 
   (* parses expression in parentheses*)
@@ -453,9 +469,12 @@ end = struct
   (* parse table init {expr, expr, ...}*)
   and parse_table_init inp =
     let parse_kv_pair_or_value =
-      (s_parse_l_bracket *> parse_expr
+      s_parse_l_bracket *> parse_expr
       <* !!s_parse_r_bracket
-      <* parse_assign_op) <|> (parse_ident <* parse_assign_op >>= fun idex -> return (LuaConst(LuaString idex)))
+      <* parse_assign_op
+      <|> (parse_ident
+          <* parse_assign_op
+          >>= fun idex -> return (LuaConst (LuaString idex)))
       >>= (fun key -> parse_expr >>= fun value -> return (PairExpr (key, value)))
       <|> (parse_expr >>= fun e -> return (JustExpr e))
     in

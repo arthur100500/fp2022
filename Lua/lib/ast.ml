@@ -22,7 +22,7 @@ module rec Ast : sig
     | LuaFunction of ident list * block
     (* nil *)
     | LuaNil
-  [@@deriving show { with_path = false }]
+  [@@deriving show { with_path = false }, ord]
 
   and expr =
     (* number or string or ..., written in const *)
