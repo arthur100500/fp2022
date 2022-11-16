@@ -108,10 +108,34 @@ print(3 - 1 - 1)
 |}
   ;;
 
+  let map_t = 
+    {|
+-- I don't have forin loop but it will be here soon
+function map(lst, f)
+  local i = 1
+  while lst[i] do
+    lst[i] = f(lst[i])
+    i = i + 1
+  end
+  return lst
+end
+
+l = {2, 4, 6, 8, 10, 12, 14, 17}
+f_ = function(x) return x ^ 2 end
+l1 = map(l, f_)
+
+print("Map function")
+for i = 1, 8 do
+  print(l1[i])
+end
+
+    |}
+
   let ectx = Interpreter.emptyctx
   let () = run_from_string fact ectx
   let () = run_from_string fib ectx
   let () = run_from_string global_local ectx
   let () = run_from_string tables ectx
   let () = run_from_string precedence_t ectx
+  let () = run_from_string map_t ectx
 end
