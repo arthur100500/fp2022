@@ -4,5 +4,11 @@
  (public_name demoInterp)
  (libraries lua_lib))
 
+(executable
+ (name demoParse)
+ (modules demoParse)
+ (public_name demoParse)
+ (libraries lua_lib))
+
 (cram
- (deps ./demoInterp.exe))
+ (deps ./demoInterp.exe ./demoParse.exe))

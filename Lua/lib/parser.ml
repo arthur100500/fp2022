@@ -9,6 +9,7 @@ module Parser : sig
     | Failed of string
     | Parsed of 'a * input
     | HardFailed of string
+  (* HardFailed is used in case the error in parsing is severe, like a forgotten closing bracket. It indicates an error to be given back from parser*)
 
   type 'a parser
 
@@ -60,12 +61,14 @@ end = struct
     | _ -> p2 s
   ;;
 
+  (* Makes parser fail with hardfail to give info about certain problem*)
   let ( !! ) par s =
     match par s with
     | Parsed (h, t) -> Parsed (h, t)
     | Failed m | HardFailed m -> HardFailed m
   ;;
 
+  (* Makes parser fail with a specific error *)
   let ( -/-> ) par msg s =
     match par s with
     | Parsed (h, t) -> Parsed (h, t)
@@ -202,24 +205,7 @@ end = struct
       | false -> return (Number (implode whole)))
   ;;
 
-  (* Parse operator (sequence of +-=<>/%~*^ chars)*)
-  let parse_operator =
-    (fun p ->
-      match
-        parse_many
-          (parse_symbol (fun x ->
-             List.mem x [ '='; '+'; '-'; '*'; '/'; '%'; '^'; '~'; '<'; '>' ]))
-          p
-      with
-      | Parsed ([], _) -> Failed "not an operator"
-      | Parsed (res, t) -> return (Operator (implode res)) t
-      | Failed msg | HardFailed msg -> Failed msg)
-    <|> (parse_sequence (explode "and")
-        <|> parse_sequence (explode "or")
-        <|> parse_sequence (explode "not")
-        <|> parse_sequence (explode "..")
-        >>= fun res -> return (Operator (implode res)))
-  ;;
+
 
   let parse_sequences = function
     | [] -> fail "Nothing was expected to be parsed"
@@ -263,6 +249,8 @@ end = struct
     parse_many (parse_any_spaces <|> parse_comment <|> parse_comment)
   ;;
 
+  let parse_operator = parse_sequences (List.map explode operators) >>= fun op -> return (Operator (implode op))
+
   let s_parse_comma = parse_useless_stuff >> parse_comma -/-> "Expected ,"
   let s_parse_dot = parse_useless_stuff >> parse_dot -/-> "Expected ."
   let s_parse_l_bracket = parse_useless_stuff >> parse_l_br -/-> "Expected ["
@@ -295,6 +283,14 @@ end = struct
     | Operator x when List.mem x operators -> return (Operator x)
     | _ -> fail "Expected arithmetc operator"
   ;;
+
+  let s_parse_binop = s_parse_operator >>= function 
+   | Operator x when List.mem x [ "and"; "or"; "+"; "-"; "/"; "*"; ">"; ">="; "<"; "<="; "=="; "^"; ".." ] -> return (Operator x)
+   | _ -> fail "Expected binary operator"
+
+  let s_parse_unnop = s_parse_operator >>= function 
+   | Operator x when List.mem x [ "not"; "-" ] -> return (Operator x)
+   | _ -> fail "Expected binary operator"
 
   let parse_specific_keyword kw inp =
     (wrap s_parse_keyword
@@ -388,9 +384,7 @@ end = struct
     helper body t)
       inp
 
-  (* parses expr of a constant
-   TODO: Add other const types
-*)
+  (* parses expr of a constant*)
   and parse_const inp =
     (parse_string_expr
     <|> parse_number_expr
@@ -400,7 +394,7 @@ end = struct
       inp
 
   and parse_unary_op inp =
-    (s_parse_arithm_operator
+    (s_parse_unnop
     >>= function
     | Operator op -> !!parse_primary_expr >>= fun e -> return (LuaUnOp (op, e))
     | _ -> fail "expected operator")
@@ -408,7 +402,7 @@ end = struct
 
   (* parses binary operators with precedence*)
   and parse_bin_op_rhs expr_recedence lhs inp =
-    match s_parse_arithm_operator inp with
+    match s_parse_binop inp with
     | Parsed (Operator op1, t1) ->
       let this_precedence = get_presedence op1 in
       if this_precedence < expr_recedence
@@ -417,7 +411,7 @@ end = struct
         match parse_primary_expr t1 with
         | Parsed (rPrExpr, t2) ->
           let rhs =
-            match s_parse_arithm_operator t2 with
+            match s_parse_binop t2 with
             | Parsed (Operator op2, _) ->
               let next_precedence = get_presedence op2 in
               if this_precedence < next_precedence
