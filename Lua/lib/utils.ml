@@ -1,3 +1,7 @@
+(** Copyright 2021-2022, Arthur Alekseev *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
 (* Convert string to char array *)
 let explode s =
   let rec exp i l = if i < 0 then l else exp (i - 1) (s.[i] :: l) in

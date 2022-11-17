@@ -1,3 +1,7 @@
+(** Copyright 2021-2022, Arthur Alekseev *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
 open Base
 open Lua_lib.Parser
 open Lua_lib.Ast
