@@ -2,7 +2,6 @@
 
 (** SPDX-License-Identifier: LGPL-3.0-or-later *)
 
-open Utils
 open Ast
 
 module Interpreter : sig
@@ -20,19 +19,89 @@ end = struct
   include Ast
   include Parser
 
+  module rec Const : sig
+    type t =
+      | String of string
+      | Number of float
+      | Function of Ast.lua_function
+      | Nil
+      | Table of LuaTableMap.t
+      | Bool of bool
+    [@@deriving show]
+
+    val from_const : const -> t
+  end = struct
+    type t =
+      | String of string
+      | Number of float
+      | Function of Ast.lua_function
+      | Nil
+      | Table of LuaTableMap.t
+      | Bool of bool
+    [@@deriving show]
+
+    let from_const = function
+      | LuaString s -> String s
+      | LuaNumber n -> Number n
+      | LuaBool b -> Bool b
+      | LuaNil -> Nil
+      | LuaFunction f -> Function f
+    ;;
+  end
+
+  and LuaTableMap : sig
+    type t [@@deriving show]
+
+    val empty : t
+    val add : Const.t -> Const.t -> t -> t
+    val remove : Const.t -> t -> t
+    val replace : Const.t -> Const.t -> t -> t
+    val find_opt : Const.t -> t -> Const.t option
+    val compare : t -> t -> int
+  end = struct
+    include Ast
+
+    module M = Map.Make (struct
+      type t = Const.t
+
+      let compare = compare
+    end)
+
+    type t = Const.t M.t
+
+    let compare a b = M.compare compare a b
+
+    let show m =
+      M.fold (fun k v a -> a ^ Format.asprintf "[%a] = %a" Const.pp k Const.pp v) m ""
+    ;;
+
+    let pp ppf t =
+      Format.fprintf ppf "{"
+      |> fun () ->
+      M.iter (fun k v -> Format.fprintf ppf "[%a] = %a" Const.pp k Const.pp v) t
+      |> fun () -> Format.fprintf ppf "}"
+    ;;
+
+    let empty = M.empty
+    let add = M.add
+    let remove = M.remove
+    let replace k v tbl = M.update k (fun _ -> Some v) tbl
+    let find_opt = M.find_opt
+  end
+
   module VarsMap : sig
     type t [@@deriving show]
 
-    val find_opt : string -> t -> const option
-    val replace : string -> const -> t -> t
+    val find_opt : string -> t -> Const.t option
+    val replace : string -> Const.t -> t -> t
     val empty : t
   end = struct
     module M = Map.Make (String)
 
-    type t = const M.t
+    type t = Const.t M.t
 
-    let show m = M.fold (fun k v a -> a ^ Format.asprintf "[%s] = %a" k pp_const v) m ""
-    let pp ppf t = M.iter (fun k v -> Format.fprintf ppf "[%s] = %a" k pp_const v) t
+    let show m = M.fold (fun k v a -> a ^ Format.asprintf "[%s] = %a" k Const.pp v) m ""
+    let pp ppf t = M.iter (fun k v -> Format.fprintf ppf "[%s] = %a" k Const.pp v) t
     let find_opt = M.find_opt
     let replace k v t = M.update k (fun _ -> Some v) t
     let empty = M.empty
@@ -42,10 +111,10 @@ end = struct
 
   type context =
     { vars : variables
-    ; previous : context maybe
-    ; last_exec : const
-    ; brk : int maybe
-    ; ret : int maybe
+    ; previous : context option
+    ; last_exec : Const.t
+    ; brk : int option
+    ; ret : int option
     ; level : int
     }
   [@@deriving show { with_path = false }]
@@ -75,7 +144,7 @@ end = struct
   let return_le res ctx = return { ctx with last_exec = res }
 
   let rec get_var varname = function
-    | None -> return_le LuaNil
+    | None -> return_le Nil
     | Some ctx ->
       (match VarsMap.find_opt varname ctx.vars with
        | Some v -> return_le v
@@ -84,7 +153,7 @@ end = struct
 
   let rec exec_expr ex ctx =
     match ex with
-    | LuaConst c -> return_le c ctx ctx
+    | LuaConst c -> return_le (Const.from_const c) ctx ctx
     | LuaVariable v -> (get_var v (Some ctx)) ctx ctx
     | LuaTableGet (t, i) -> get_from_table ctx t i
     | LuaTableInit el -> create_table ctx el ctx
@@ -101,12 +170,12 @@ end = struct
         exec_expr h
         >>= fun h_res ->
         (match h_res.last_exec with
-         | LuaString s -> print_string s
-         | LuaNumber n -> print_float n
-         | LuaFunction _ -> print_string "<function>"
-         | LuaNil -> print_string "nil"
-         | LuaBool v -> print_string (if v then "true" else "false")
-         | tbl -> print_string (show_const tbl));
+         | String s -> print_string s
+         | Number n -> print_float n
+         | Function _ -> print_string "<function>"
+         | Nil -> print_string "nil"
+         | Bool v -> print_string (if v then "true" else "false")
+         | tbl -> print_string (Const.show tbl));
         print_endline "";
         print_vars t h_res
     in
@@ -126,12 +195,12 @@ end = struct
              ret = Some ctx.level
            ; vars = VarsMap.empty
            ; previous = Some ctx
-           ; last_exec = LuaNil
+           ; last_exec = Nil
            ; level = ctx.level + 1
            }
          >>= fun _ ->
          (match expr_e.last_exec with
-          | LuaFunction (idents, body) ->
+          | Function (idents, body) ->
             exec_local_set idents args
             >>= fun c ->
             (match exec_many body c with
@@ -140,7 +209,7 @@ end = struct
                return ctx
                >>= fun ctx ->
                (match ctx.previous with
-                | Some p -> return { p with last_exec = LuaNil }
+                | Some p -> return { p with last_exec = Nil }
                 | None -> error "Exiting from global context")
              | Error m -> error m
              | Breaking _ -> error "breaking from non loop")
@@ -148,11 +217,11 @@ end = struct
 
   and exec_un_op op le =
     let exec_bool_uop op last_ctx = function
-      | LuaBool x -> return { last_ctx with last_exec = LuaBool (op x) }
+      | Const.Bool x -> return { last_ctx with last_exec = Bool (op x) }
       | _ -> error "Attempt to do logic with non boolens"
     in
     let exec_num_uop op last_ctx = function
-      | LuaNumber x -> return { last_ctx with last_exec = LuaNumber (op x) }
+      | Const.Number x -> return { last_ctx with last_exec = Number (op x) }
       | _ -> error "Attempt to do math with non numbers"
     in
     exec_expr le
@@ -165,28 +234,27 @@ end = struct
   and exec_bin_op op le re ctx =
     (let exec_num_op ler rer op last_ctx =
        match ler, rer with
-       | LuaNumber x, LuaNumber y ->
-         return { last_ctx with last_exec = LuaNumber (op x y) }
+       | Const.Number x, Const.Number y ->
+         return { last_ctx with last_exec = Number (op x y) }
        | _ -> error "Attempt to do math with non numbers"
      in
      let exec_str_op ler rer op last_ctx =
        match ler, rer with
-       | LuaString x, LuaString y ->
-         return { last_ctx with last_exec = LuaString (op x y) }
+       | Const.String x, Const.String y ->
+         return { last_ctx with last_exec = String (op x y) }
        | _ -> error "Attempt to do concatenation with non strings"
      in
      let exec_bool_op ler rer op last_ctx =
        match ler, rer with
-       | x, y ->
-         return { last_ctx with last_exec = LuaBool (op (get_bool x) (get_bool y)) }
+       | x, y -> return { last_ctx with last_exec = Bool (op (get_bool x) (get_bool y)) }
      in
      let exec_eq_op ler rer op last_ctx =
        match ler, rer with
-       | x, y -> return { last_ctx with last_exec = LuaBool (op x y) }
+       | x, y -> return { last_ctx with last_exec = Bool (op x y) }
      in
      let exec_comp_op ler rer op last_ctx =
        match ler, rer with
-       | x, y -> return { last_ctx with last_exec = LuaBool (op x y) }
+       | x, y -> return { last_ctx with last_exec = Bool (op x y) }
      in
      exec_expr le
      >>= fun le_e ->
@@ -218,17 +286,17 @@ end = struct
     exec_expr i
     >>= fun i_e ->
     match t_e.last_exec with
-    | LuaTable ht ->
+    | Table ht ->
       (match LuaTableMap.find_opt i_e.last_exec ht with
        | Some v -> return { ctx with last_exec = v }
-       | None -> return { ctx with last_exec = LuaNil })
+       | None -> return { ctx with last_exec = Nil })
     | _ -> error "Taking index from non table")
       ctx
 
   and create_table ctx kvp_e_list =
     let ht = LuaTableMap.empty in
     let rec add_kvp tbl ictx li = function
-      | [] -> return { ictx with last_exec = LuaTable tbl }
+      | [] -> return { ictx with last_exec = Table tbl }
       | h :: t ->
         (match h with
          | PairExpr (k, v) ->
@@ -240,7 +308,7 @@ end = struct
          | JustExpr v ->
            exec_expr v
            >>= fun v_e ->
-           add_kvp (LuaTableMap.replace (LuaNumber li) v_e.last_exec tbl) v_e (li +. 1.) t)
+           add_kvp (LuaTableMap.replace (Number li) v_e.last_exec tbl) v_e (li +. 1.) t)
     in
     add_kvp ht ctx 1. kvp_e_list
 
@@ -249,7 +317,7 @@ end = struct
        { ctx with
          vars = VarsMap.empty
        ; previous = Some ctx
-       ; last_exec = LuaNil
+       ; last_exec = Nil
        ; level = ctx.level + 1
        }
     >>= fun _ ->
@@ -266,7 +334,7 @@ end = struct
          vars = VarsMap.empty
        ; previous = Some ctx
        ; brk = Some ctx.level
-       ; last_exec = LuaNil
+       ; last_exec = Nil
        ; level = ctx.level + 1
        }
     >>= fun nctx ->
@@ -307,7 +375,7 @@ end = struct
       exec_up_ctx (exec_if ifexpr block elseif_blocks else_block) ctx
     | LuaStatementApply apply -> exec_expr (LuaExprApply apply) ctx
     | LuaReturn ex -> exec_return ex ctx
-    | LuaFunctionDeclare (id, ids, blk) -> exec_set_one id (LuaFunction (ids, blk)) ctx
+    | LuaFunctionDeclare (id, ids, blk) -> exec_set_one id (Const.Function (ids, blk)) ctx
     | LuaBreak -> exec_break ctx
     | LuaWhile (ex, blck) -> exec_loop_ctx (exec_while ex blck) ctx
     | LuaRepeat (blck, ex) -> exec_loop_ctx (exec_until blck ex) ctx
@@ -326,7 +394,7 @@ end = struct
        | None -> LuaConst (LuaNumber 1.))
     >>= fun loop_step ->
     match loop_begin.last_exec, loop_end.last_exec, loop_step.last_exec with
-    | LuaNumber lbegin, LuaNumber lend, LuaNumber lstep ->
+    | Number lbegin, Number lend, Number lstep ->
       let rec loop_iter iter ctx =
         match
           (if lstep > 0. then ( <= ) else ( >= )) (lbegin +. (iter *. lstep)) lend
@@ -391,7 +459,7 @@ end = struct
     | None -> error "Returning outside a function"
 
   and get_bool = function
-    | LuaBool false | LuaNil -> false
+    | Bool false | Nil -> false
     | _ -> true
 
   and exec_if iex blck elseifs elseblck =
@@ -415,7 +483,7 @@ end = struct
       | ch :: ct, rh :: rt ->
         exec_expr rh
         >>= fun rhr -> exec_set_one ch rhr.last_exec >>= fun nctx -> helper ct rt nctx
-      | ch :: ct, [] -> exec_set_one ch LuaNil >>= fun nctx -> helper ct rl nctx
+      | ch :: ct, [] -> exec_set_one ch Nil >>= fun nctx -> helper ct rl nctx
       | [], _ -> return ctx
     in
     helper ce re ctx ctx
@@ -462,9 +530,9 @@ end = struct
         | h :: [] -> Some (LuaTableMap.replace h re tbl)
         | h :: t ->
           (match LuaTableMap.find_opt h tbl with
-           | Some (LuaTable ntbl) ->
+           | Some (Table ntbl) ->
              (match replace_in_table t ntbl with
-              | Some nntbl -> Some (LuaTableMap.replace h (LuaTable nntbl) tbl)
+              | Some nntbl -> Some (LuaTableMap.replace h (Table nntbl) tbl)
               | None -> None)
            | _ -> None)
         | [] -> Some tbl
@@ -473,11 +541,11 @@ end = struct
         match VarsMap.find_opt primal_id ctx.vars with
         | Some tbl ->
           (match tbl with
-           | LuaTable tbl ->
+           | Table tbl ->
              (match replace_in_table (List.rev const_lst) tbl with
               | Some tbl ->
                 Interpreted
-                  { ctx with vars = VarsMap.replace primal_id (LuaTable tbl) ctx.vars }
+                  { ctx with vars = VarsMap.replace primal_id (Table tbl) ctx.vars }
               | None -> Error "Attempt to index non table")
            | _ -> Error "Attempt to index non table")
         | None -> Error "Attempt to index nil"
@@ -499,7 +567,7 @@ end = struct
   let emptyctx =
     { vars = VarsMap.empty
     ; previous = None
-    ; last_exec = LuaNil
+    ; last_exec = Nil
     ; ret = None
     ; brk = None
     ; level = 0

@@ -2,7 +2,7 @@
 
 (** SPDX-License-Identifier: LGPL-3.0-or-later *)
 
-module rec Ast : sig
+module Ast : sig
   type ident = string [@@deriving show { with_path = false }]
 
   type block = statement list [@@deriving show { with_path = false }]
@@ -11,92 +11,56 @@ module rec Ast : sig
     | JustExpr of expr
     | PairExpr of expr * expr
 
+  and lua_function = ident list * block
+
   and const =
-    (* true | false *)
-    | LuaBool of bool
-    (* 1, 2.3, 3, ...*)
-    | LuaNumber of float
-    (* "abc" *)
-    | LuaString of string
-    (* table of strings ints tables with other thigs... *)
-    | LuaTable of LuaTableMap.t
-    (* function(args) block end *)
-    | LuaFunction of ident list * block
-    (* nil *)
-    | LuaNil
+    | LuaBool of bool (** true | false *)
+    | LuaNumber of float (** 1, 2.3, 3, ...*)
+    | LuaString of string (** "abc" *)
+    | LuaFunction of lua_function (** function(args) block end *)
+    | LuaNil (** nil *)
   [@@deriving show { with_path = false }, ord]
 
   and expr =
-    (* number or string or ..., written in const *)
-    | LuaConst of const
-    (* obv. variable *)
-    | LuaVariable of ident
-    (* expr[expr] *)
-    | LuaTableGet of expr * expr
-    (* {expr, expr, expr, ...} *)
-    | LuaTableInit of expr_table_entry list
-    (* expr binop expr *)
-    | LuaBinOp of string * expr * expr
-    (* unop expr*)
-    | LuaUnOp of string * expr
-    (* expr(expr, ..., expr) *)
-    | LuaExprApply of apply
+    | LuaConst of const (** number or string or ..., written in const *)
+    | LuaVariable of ident (** obv. variable *)
+    | LuaTableGet of expr * expr (** expr[expr] *)
+    | LuaTableInit of expr_table_entry list (** {expr, expr, expr, ...} *)
+    | LuaBinOp of string * expr * expr (** expr binop expr *)
+    | LuaUnOp of string * expr (** unop expr*)
+    | LuaExprApply of apply (** expr(expr, ..., expr) *)
   [@@deriving show { with_path = false }]
 
-  and apply = (* expr(expr, ..., expr) *)
-    | LuaCall of expr * expr list
+  and apply = LuaCall of expr * expr list (** expr(expr, ..., expr) *)
   [@@deriving show { with_path = false }]
 
   and statement =
-    (* do sttmn sttmnt end*)
-    | LuaDo of block
-    (* a, b, c = d, e, f*)
-    | LuaSet of lvalue list * expr list
-    (* while expr do block*)
-    | LuaWhile of expr * block
-    (* repeat block until expr *)
-    | LuaRepeat of block * expr
-    (* if expr then block [elseif block] else block end*)
-    | LuaIf of expr * block * elseif_block list * block Utils.maybe
-    (* for var = expr, expr, ?expr, block *)
-    | LuaFornum of ident * expr * expr * expr Utils.maybe * block
-    (* for expr, expr, ... in expr, expr, ... do block *)
+    | LuaDo of block (** do sttmn sttmnt end*)
+    | LuaSet of lvalue list * expr list (** a, b, c = d, e, f*)
+    | LuaWhile of expr * block (** while expr do block*)
+    | LuaRepeat of block * expr (** repeat block until expr *)
+    | LuaIf of expr * block * elseif_block list * block option
+        (** if expr then block [elseif block] else block end*)
+    | LuaFornum of ident * expr * expr * expr option * block
+        (** for var = expr, expr, ?expr, block *)
     | LuaForin of ident list * expr list * block
-    (* local a = ?expr *)
-    | LuaLocal of ident list * expr list
-    (* return expr *)
-    | LuaReturn of expr Utils.maybe
-    (* break *)
-    | LuaBreak
-    (* just a fun call, needed because of side effects  *)
-    | LuaStatementApply of apply
-    (* function name(args) body end*)
-    | LuaFunctionDeclare of lvalue * ident list * block
-    (* just an expression, will be printed, for REPL *)
-    | LuaExpr of expr
+        (** for expr, expr, ... in expr, expr, ... do block *)
+    | LuaLocal of ident list * expr list (** local a = ?expr *)
+    | LuaReturn of expr option (** return expr *)
+    | LuaBreak (** break *)
+    | LuaStatementApply of apply (** just a fun call, needed because of side effects  *)
+    | LuaFunctionDeclare of lvalue * ident list * block (** function name(args) body end*)
+    | LuaExpr of expr (** just an expression, will be printed, for REPL *)
   [@@deriving show { with_path = false }]
 
   and lvalue =
-    (* a[1][2][3]..[n][n][n] *)
-    | Index of lvalue * expr
-    (* var *)
-    | Ident of ident
+    | Index of lvalue * expr (** a[1][2][3]..[n][n][n] *)
+    | Ident of ident (** var *)
   [@@deriving show { with_path = false }]
 
-  (* elseif expr then block *)
+  (** elseif expr then block *)
   and elseif_block = expr * block
 
   type ast = block [@@deriving show { with_path = false }]
   type t = ast
-end
-
-and LuaTableMap : sig
-  type t [@@deriving show]
-
-  val empty : t
-  val add : Ast.const -> Ast.const -> t -> t
-  val remove : Ast.const -> t -> t
-  val replace : Ast.const -> Ast.const -> t -> t
-  val find_opt : Ast.const -> t -> Ast.const option
-  val compare : t -> t -> int
 end

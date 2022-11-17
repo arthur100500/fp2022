@@ -6,8 +6,3 @@ val explode : string -> char list
 val implode : char list -> Stdlib.String.t
 val isChar : char -> bool
 val isDigit : char -> bool
-
-type 'a maybe =
-  | Some of 'a
-  | None
-[@@deriving show]
