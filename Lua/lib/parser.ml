@@ -328,7 +328,7 @@ end = struct
     | _ -> fail "Expected binary operator"
   ;;
 
-  let s_parse_unnop =
+  let s_parse_unop =
     s_parse_operator
     >>= function
     | x when List.mem x unops -> return x
@@ -424,8 +424,7 @@ end = struct
       inp
 
   and parse_unary_op inp =
-    (s_parse_unnop
-    >>= fun op -> !!parse_primary_expr >>= fun e -> return (LuaUnOp (op, e)))
+    (s_parse_unop >>= fun op -> !!parse_primary_expr >>= fun e -> return (LuaUnOp (op, e)))
       inp
 
   (* parses binary operators with precedence*)
