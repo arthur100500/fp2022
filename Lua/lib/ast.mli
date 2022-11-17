@@ -1,3 +1,7 @@
+(** Copyright 2021-2022, Arthur Alekseev *)
+
+(** SPDX-License-Identifier: LGPL-3.0-or-later *)
+
 module rec Ast : sig
   type ident = string [@@deriving show { with_path = false }]
 
