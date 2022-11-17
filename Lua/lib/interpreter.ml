@@ -360,15 +360,15 @@ end = struct
       if c.level = lvl
       then Breaking c
       else if c.level < lvl
-      then Error "breaking outside a loop"
+      then Error "Breaking outside a loop"
       else (
         match c.previous with
         | Some p -> find_ctx lvl p
-        | None -> Error "trying to exit global context")
+        | None -> Error "Trying to exit global context")
     in
     match ctx.brk with
     | Some lvl -> find_ctx lvl ctx
-    | None -> Error "breaking outside a loop"
+    | None -> Error "Breaking outside a loop"
 
   and exec_return ex =
     exec_expr
@@ -380,15 +380,15 @@ end = struct
       if c.level = lvl
       then Returning { c with last_exec = ctx.last_exec }
       else if c.level < lvl
-      then Error "returning outside a function"
+      then Error "Returning outside a function"
       else (
         match c.previous with
         | Some p -> find_ctx lvl p
-        | None -> Error "trying to exit global context")
+        | None -> Error "Trying to exit global context")
     in
     match ctx.ret with
     | Some lvl -> fun _ -> find_ctx lvl ctx
-    | None -> error "returning outside a function"
+    | None -> error "Returning outside a function"
 
   and get_bool = function
     | LuaBool false | LuaNil -> false
