@@ -45,7 +45,7 @@ end = struct
   (* Parse char if cond returns true *)
   let parse_symbol cond = function
     | h :: t when cond h -> return h t
-    | h :: _ -> Failed ("symbol \"" ^ String.make 1 h ^ "\" not resolved")
+    | h :: _ -> Failed (Format.asprintf "symbol \" %s \"not resolved" (String.make 1 h))
     | _ -> Failed "unexpected EOF"
   ;;
 
@@ -172,8 +172,7 @@ end = struct
   (* Parses keyword *)
   let parse_keyword =
     parse_variable_or_keyword
-    >>= fun res ->
-    match res with
+    >>= function
     | Keyword k -> return (Keyword k)
     | _ -> fail "not a keyword"
   ;;
@@ -181,8 +180,7 @@ end = struct
   (* Parses variable *)
   let parse_variable =
     parse_variable_or_keyword
-    >>= fun res ->
-    match res with
+    >>= function
     | Variable v -> return (Variable v)
     | _ -> fail "not a keyword"
   ;;
@@ -205,7 +203,8 @@ end = struct
       >>= (function
       | true ->
         parse_dot *> parse_many (parse_symbol isDigit)
-        >>= fun part -> return (Number (implode whole ^ "." ^ implode part))
+        >>= fun part ->
+        return (Number (Format.asprintf "%s.%s" (implode whole) (implode part)))
       | false -> return (Number (implode whole)))
   ;;
 
@@ -582,7 +581,6 @@ end = struct
      in
      let parse_else =
        parse_specific_keyword "else" *> !!(parse_block_until_fail parse_end)
-       >>= fun else_block -> return else_block
      in
      parse_specific_keyword "if" *> !!parse_expr
      >>= fun condition ->

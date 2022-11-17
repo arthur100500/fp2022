@@ -390,8 +390,7 @@ end = struct
     | Some lvl -> fun _ -> find_ctx lvl ctx
     | None -> error "returning outside a function"
 
-  and get_bool aexpr =
-    match aexpr with
+  and get_bool = function
     | LuaBool false | LuaNil -> false
     | _ -> true
 
