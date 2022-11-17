@@ -1,4 +1,6 @@
-  $ ./demoParse.exe
+  $ ./demoParse.exe <<-EOF
+  > 34 'string =)' {1, 2}
+  > EOF
   [(LuaExpr (LuaConst (LuaNumber 34.)));
     (LuaExpr (LuaConst (LuaString "string =)")));
     (LuaExpr
@@ -6,11 +8,17 @@
           [(JustExpr (LuaConst (LuaNumber 1.)));
             (JustExpr (LuaConst (LuaNumber 2.)))]))
     ]
+  $ ./demoParse.exe <<-EOF
+  > a[b], c = 3, 4, 5
+  > EOF
   [(LuaSet ([(Index ((Ident "a"), (LuaVariable "b"))); (Ident "c")],
       [(LuaConst (LuaNumber 3.)); (LuaConst (LuaNumber 4.));
         (LuaConst (LuaNumber 5.))]
       ))
     ]
+  $ ./demoParse.exe <<-EOF
+  > {} {b=3} {1} {1, 2} {1, b=2} {{}} {{}, 123} {[x] = x}
+  > EOF
   [(LuaExpr (LuaTableInit []));
     (LuaExpr
        (LuaTableInit
@@ -31,6 +39,9 @@
             ]));
     (LuaExpr (LuaTableInit [(PairExpr ((LuaVariable "x"), (LuaVariable "x")))]))
     ]
+  $ ./demoParse.exe <<-EOF
+  > a.b = 3 a.b.b.b = 3 a[b].c[d] = 3 a[4 + 1] = 3 + 2
+  > EOF
   [(LuaSet ([(Index ((Ident "a"), (LuaConst (LuaString "b"))))],
       [(LuaConst (LuaNumber 3.))]));
     (LuaSet (
@@ -56,6 +67,18 @@
        [(LuaBinOp ("+", (LuaConst (LuaNumber 3.)), (LuaConst (LuaNumber 2.))))]
        ))
     ]
+  $ ./demoParse.exe <<-EOF
+  > if a then b elseif c then d else e end
+  > if a then b end
+  > if a then b else c end
+  > for i=1,2,3 do end
+  > for i=1,2 do end
+  > while a do b end
+  > repeat a until b
+  > return
+  > return 4
+  > break
+  > EOF
   [(LuaIf ((LuaVariable "a"), [(LuaExpr (LuaVariable "b"))],
       [((LuaVariable "c"), [(LuaExpr (LuaVariable "d"))])],
       (Some [(LuaExpr (LuaVariable "e"))])));
@@ -69,6 +92,24 @@
     (LuaWhile ((LuaVariable "a"), [(LuaExpr (LuaVariable "b"))]));
     (LuaRepeat ([(LuaExpr (LuaVariable "a"))], (LuaVariable "b")));
     (LuaReturn None); (LuaReturn (Some (LuaConst (LuaNumber 4.)))); LuaBreak]
+  $ ./demoParse.exe <<-EOF
+  > 1 "3" true b {}
+  > a(1, {}, b)
+  > a.b a[b] 
+  > 1 + 2
+  > 1 + 2 * 3
+  > 1 * 2 + 3
+  > 1 + 2 * 3 + 4 * 5 ^ 6
+  > 1 + 2 * 3 - 4 - 5 - 6
+  > 1 ^ 2 - 3 * 5 ^ 5 - 7
+  > -5
+  > -5 + 1
+  > not false
+  > not true or 4
+  > not true and 4 or false
+  > not true and not false or true
+  > true and not false
+  > EOF
   [(LuaExpr (LuaConst (LuaNumber 1.))); (LuaExpr (LuaConst (LuaString "3")));
     (LuaExpr (LuaConst (LuaBool true))); (LuaExpr (LuaVariable "b"));
     (LuaExpr (LuaTableInit []));
