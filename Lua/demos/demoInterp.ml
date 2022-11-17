@@ -108,7 +108,7 @@ print(3 - 1 - 1)
 |}
   ;;
 
-  let map_t = 
+  let map_t =
     {|
 -- I don't have forin loop but it will be here soon
 function map(lst, f)
@@ -130,6 +130,7 @@ for i = 1, 8 do
 end
 
     |}
+  ;;
 
   let ectx = Interpreter.emptyctx
   let () = run_from_string fact ectx

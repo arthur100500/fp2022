@@ -205,8 +205,6 @@ end = struct
       | false -> return (Number (implode whole)))
   ;;
 
-
-
   let parse_sequences = function
     | [] -> fail "Nothing was expected to be parsed"
     | h :: t -> List.fold_left (fun p1 s -> p1 <|> parse_sequence s) (parse_sequence h) t
@@ -249,7 +247,10 @@ end = struct
     parse_many (parse_any_spaces <|> parse_comment <|> parse_comment)
   ;;
 
-  let parse_operator = parse_sequences (List.map explode operators) >>= fun op -> return (Operator (implode op))
+  let parse_operator =
+    parse_sequences (List.map explode operators)
+    >>= fun op -> return (Operator (implode op))
+  ;;
 
   let s_parse_comma = parse_useless_stuff >> parse_comma -/-> "Expected ,"
   let s_parse_dot = parse_useless_stuff >> parse_dot -/-> "Expected ."
@@ -284,13 +285,23 @@ end = struct
     | _ -> fail "Expected arithmetc operator"
   ;;
 
-  let s_parse_binop = s_parse_operator >>= function 
-   | Operator x when List.mem x [ "and"; "or"; "+"; "-"; "/"; "*"; ">"; ">="; "<"; "<="; "=="; "^"; ".." ] -> return (Operator x)
-   | _ -> fail "Expected binary operator"
+  let s_parse_binop =
+    s_parse_operator
+    >>= function
+    | Operator x
+      when List.mem
+             x
+             [ "and"; "or"; "+"; "-"; "/"; "*"; ">"; ">="; "<"; "<="; "=="; "^"; ".." ] ->
+      return (Operator x)
+    | _ -> fail "Expected binary operator"
+  ;;
 
-  let s_parse_unnop = s_parse_operator >>= function 
-   | Operator x when List.mem x [ "not"; "-" ] -> return (Operator x)
-   | _ -> fail "Expected binary operator"
+  let s_parse_unnop =
+    s_parse_operator
+    >>= function
+    | Operator x when List.mem x [ "not"; "-" ] -> return (Operator x)
+    | _ -> fail "Expected binary operator"
+  ;;
 
   let parse_specific_keyword kw inp =
     (wrap s_parse_keyword
