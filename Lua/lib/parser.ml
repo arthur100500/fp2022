@@ -76,7 +76,7 @@ end = struct
   (* Parse char if cond returns true *)
   let parse_symbol cond = function
     | h :: t when cond h -> return h t
-    | h :: _ -> Failed (Format.asprintf "symbol \" %s \"not resolved" (String.make 1 h))
+    | h :: _ -> Failed (Format.asprintf "symbol \"%c\" not resolved" h)
     | _ -> Failed "unexpected EOF"
   ;;
 

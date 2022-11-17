@@ -71,17 +71,13 @@ end = struct
 
     let compare a b = M.compare compare a b
 
-    let show m =
-      M.fold (fun k v a -> a ^ Format.asprintf "[%a] = %a" Const.pp k Const.pp v) m ""
-    ;;
-
     let pp ppf t =
-      Format.fprintf ppf "{"
-      |> fun () ->
-      M.iter (fun k v -> Format.fprintf ppf "[%a] = %a" Const.pp k Const.pp v) t
-      |> fun () -> Format.fprintf ppf "}"
+      Format.fprintf ppf "{";
+      M.iter (fun k v -> Format.fprintf ppf "[%a] = %a" Const.pp k Const.pp v) t;
+      Format.fprintf ppf "}"
     ;;
 
+    let show m = Format.asprintf "%a" pp m
     let empty = M.empty
     let add = M.add
     let remove = M.remove
@@ -100,8 +96,8 @@ end = struct
 
     type t = Const.t M.t
 
-    let show m = M.fold (fun k v a -> a ^ Format.asprintf "[%s] = %a" k Const.pp v) m ""
     let pp ppf t = M.iter (fun k v -> Format.fprintf ppf "[%s] = %a" k Const.pp v) t
+    let show m = Format.asprintf "%a" pp m
     let find_opt = M.find_opt
     let replace k v t = M.update k (fun _ -> Some v) t
     let empty = M.empty
