@@ -2,7 +2,6 @@
 
 (** SPDX-License-Identifier: LGPL-3.0-or-later *)
 
-open Luatypes
 open Utils
 open Ast
 
@@ -23,6 +22,38 @@ module Parser : sig
   val parse_expr : input -> Ast.expr parse_result
 end = struct
   include Ast
+
+  let luakeywords =
+    [ "and"
+    ; "break"
+    ; "do"
+    ; "else"
+    ; "elseif"
+    ; "end"
+    ; "false"
+    ; "for"
+    ; "function"
+    ; "if"
+    ; "in"
+    ; "local"
+    ; "nil"
+    ; "not"
+    ; "or"
+    ; "repeat"
+    ; "return"
+    ; "then"
+    ; "true"
+    ; "until"
+    ; "while"
+    ]
+  ;;
+
+  let operators =
+    [ "and"; "or"; "+"; "-"; "/"; "*"; ">="; "<="; ">"; "<"; "=="; "^"; "not"; ".."; "=" ]
+  ;;
+
+  let binops = [ "and"; "or"; "+"; "-"; "/"; "*"; ">"; ">="; "<"; "<="; "=="; "^"; ".." ]
+  let unops = [ "not"; "-" ]
 
   type input = char list
 
@@ -131,31 +162,35 @@ end = struct
   (* Parses spaces *)
   let parse_spaces =
     parse_many (parse_symbol (fun x -> x = ' ' || x = '\t' || x = '\n'))
-    >>= fun x -> return (Spaces (implode x))
+    >>= fun x -> return (implode x)
   ;;
 
   (* Parses parentheses *)
-  let parse_l_par = parse_symbol (fun x -> x = '(') *> return LParentheses
-  let parse_r_par = parse_symbol (fun x -> x = ')') *> return RParentheses
-  let parse_l_br = parse_symbol (fun x -> x = '[') *> return LBrackets
-  let parse_r_br = parse_symbol (fun x -> x = ']') *> return RBrackets
-  let parse_l_c_br = parse_symbol (fun x -> x = '{') *> return LCurlBrackets
-  let parse_r_c_br = parse_symbol (fun x -> x = '}') *> return RCurlBrackets
+  let parse_l_par = parse_symbol (fun x -> x = '(') *> return true
+  let parse_r_par = parse_symbol (fun x -> x = ')') *> return true
+  let parse_l_br = parse_symbol (fun x -> x = '[') *> return true
+  let parse_r_br = parse_symbol (fun x -> x = ']') *> return true
+  let parse_l_c_br = parse_symbol (fun x -> x = '{') *> return true
+  let parse_r_c_br = parse_symbol (fun x -> x = '}') *> return true
 
   (* Parses komma *)
-  let parse_comma = parse_symbol (fun x -> x = ',') *> return Comma
+  let parse_comma = parse_symbol (fun x -> x = ',') *> return true
 
   (* Parses dot *)
-  let parse_dot = parse_symbol (fun x -> x = '.') *> return Dot
+  let parse_dot = parse_symbol (fun x -> x = '.') *> return true
 
   (* Parses semicolon *)
-  let parse_semicolon = parse_symbol (fun x -> x = ';') *> return Semicolon
+  let parse_semicolon = parse_symbol (fun x -> x = ';') *> return true
 
   (* Parses one line comment *)
   let parse_comment =
     parse_sequence [ '-'; '-' ] *> parse_many (parse_symbol (fun x -> x != '\n'))
-    >>= fun c -> return (Comment (implode c))
+    >>= fun c -> return (implode c)
   ;;
+
+  type kwd_or_var =
+    | Keyword of string
+    | Variable of string
 
   (* Parses variable or keyword *)
   let parse_variable_or_keyword =
@@ -173,16 +208,16 @@ end = struct
   let parse_keyword =
     parse_variable_or_keyword
     >>= function
-    | Keyword k -> return (Keyword k)
-    | _ -> fail "not a keyword"
+    | Keyword k -> return k
+    | _ -> fail "Variable expected"
   ;;
 
   (* Parses variable *)
   let parse_variable =
     parse_variable_or_keyword
     >>= function
-    | Variable v -> return (Variable v)
-    | _ -> fail "not a keyword"
+    | Variable v -> return v
+    | _ -> fail "Keyword expected"
   ;;
 
   (* return true if there is a dot, returns false otherwise*)
@@ -203,9 +238,8 @@ end = struct
       >>= (function
       | true ->
         parse_dot *> parse_many (parse_symbol isDigit)
-        >>= fun part ->
-        return (Number (Format.asprintf "%s.%s" (implode whole) (implode part)))
-      | false -> return (Number (implode whole)))
+        >>= fun part -> return (Format.asprintf "%s.%s" (implode whole) (implode part))
+      | false -> return (implode whole))
   ;;
 
   let parse_sequences = function
@@ -219,7 +253,7 @@ end = struct
     *> (parse_sequences (List.map explode [ "\\n"; "\\\""; "\\\'"; "\\[["; "\\" ])
        <|> parse_many (fail_if_parsed end_parser *> parse_symbol (fun s -> s <> '\n')))
     <* end_parser
-    >>= fun s -> return (String (implode s))
+    >>= fun s -> return (implode s)
   ;;
 
   (* Parses string*)
@@ -228,7 +262,7 @@ end = struct
     *> (parse_sequences (List.map explode [ "\\n"; "\\\""; "\\\'"; "\\[["; "\\" ])
        <|> parse_many (fail_if_parsed end_parser *> parse_symbol (fun _ -> true)))
     <* end_parser
-    >>= fun s -> return (String (implode s))
+    >>= fun s -> return (implode s)
   ;;
 
   (* Takes code and position, and gets line number and character offset *)
@@ -244,15 +278,14 @@ end = struct
     let parse_any_spaces =
       parse_spaces
       >>= function
-      | Spaces "" -> fail "no spaces"
+      | "" -> fail "no spaces"
       | s -> return s
     in
     parse_many (parse_any_spaces <|> parse_comment <|> parse_comment)
   ;;
 
   let parse_operator =
-    parse_sequences (List.map explode operators)
-    >>= fun op -> return (Operator (implode op))
+    parse_sequences (List.map explode operators) >>= fun op -> return (implode op)
   ;;
 
   let s_parse_comma = parse_useless_stuff >> parse_comma -/-> "Expected ,"
@@ -284,50 +317,41 @@ end = struct
   let s_parse_arithm_operator =
     s_parse_operator
     >>= function
-    | Operator x when List.mem x operators -> return (Operator x)
+    | x when List.mem x operators -> return x
     | _ -> fail "Expected arithmetc operator"
   ;;
 
   let s_parse_binop =
     s_parse_operator
     >>= function
-    | Operator x
-      when List.mem
-             x
-             [ "and"; "or"; "+"; "-"; "/"; "*"; ">"; ">="; "<"; "<="; "=="; "^"; ".." ] ->
-      return (Operator x)
+    | x when List.mem x binops -> return x
     | _ -> fail "Expected binary operator"
   ;;
 
   let s_parse_unnop =
     s_parse_operator
     >>= function
-    | Operator x when List.mem x [ "not"; "-" ] -> return (Operator x)
+    | x when List.mem x unops -> return x
     | _ -> fail "Expected binary operator"
   ;;
 
   let parse_specific_keyword kw inp =
     (wrap s_parse_keyword
     >>= function
-    | Some (Keyword w) when w = kw -> return true
+    | Some w when w = kw -> return true
     | _ -> fail ("Expected " ^ kw))
       inp
   ;;
 
   (**** Makes ast tree ****)
   (* parses variable and returns Id string*)
-  let parse_ident =
-    s_parse_variable
-    >>= function
-    | Variable v -> return v
-    | _ -> fail "ident expected"
-  ;;
+  let parse_ident = s_parse_variable
 
   (* parses '=' operator only *)
   let parse_assign_op =
     s_parse_operator
     >>= function
-    | Operator "=" -> return (Operator "=")
+    | "=" -> return "="
     | _ -> fail "= expected"
   ;;
 
@@ -335,28 +359,20 @@ end = struct
   let parse_bool_expr =
     s_parse_keyword
     >>= function
-    | Keyword "true" -> return (LuaConst (LuaBool true))
-    | Keyword "false" -> return (LuaConst (LuaBool false))
+    | "true" -> return (LuaConst (LuaBool true))
+    | "false" -> return (LuaConst (LuaBool false))
     | _ -> fail "boolean expected"
   ;;
 
   (* parses string as expression *)
-  let parse_string_expr =
-    s_parse_string
-    >>= function
-    | String s -> return (LuaConst (LuaString s))
-    | _ -> fail "string expected"
-  ;;
+  let parse_string_expr = s_parse_string >>= fun s -> return (LuaConst (LuaString s))
 
   (* parses nil as expression *)
   let parse_nil_expr = parse_specific_keyword "nil" *> return (LuaConst LuaNil)
 
   (* parses number as expression *)
   let parse_number_expr =
-    s_parse_number
-    >>= function
-    | Number n -> return (LuaConst (LuaNumber (float_of_string n)))
-    | _ -> fail "number expected"
+    s_parse_number >>= fun n -> return (LuaConst (LuaNumber (float_of_string n)))
   ;;
 
   (* delim parser*)
@@ -409,15 +425,13 @@ end = struct
 
   and parse_unary_op inp =
     (s_parse_unnop
-    >>= function
-    | Operator op -> !!parse_primary_expr >>= fun e -> return (LuaUnOp (op, e))
-    | _ -> fail "expected operator")
+    >>= fun op -> !!parse_primary_expr >>= fun e -> return (LuaUnOp (op, e)))
       inp
 
   (* parses binary operators with precedence*)
   and parse_bin_op_rhs expr_recedence lhs inp =
     match s_parse_binop inp with
-    | Parsed (Operator op1, t1) ->
+    | Parsed (op1, t1) ->
       let this_precedence = get_presedence op1 in
       if this_precedence < expr_recedence
       then Parsed (lhs, inp)
@@ -426,7 +440,7 @@ end = struct
         | Parsed (rPrExpr, t2) ->
           let rhs =
             match s_parse_binop t2 with
-            | Parsed (Operator op2, _) ->
+            | Parsed (op2, _) ->
               let next_precedence = get_presedence op2 in
               if this_precedence < next_precedence
               then parse_bin_op_rhs (this_precedence + 1) rPrExpr t2
@@ -449,12 +463,7 @@ end = struct
     (parse_primary_expr >>= fun lhs -> parse_bin_op_rhs 0 lhs) inp
 
   (* parses variable *)
-  and parse_var_expr inp =
-    (s_parse_variable
-    >>= function
-    | Variable v -> return (LuaVariable v)
-    | _ -> fail "variable expected")
-      inp
+  and parse_var_expr inp = (s_parse_variable >>= fun v -> return (LuaVariable v)) inp
 
   (* parse (arg1, arg2...) and takes the first arg as the body *)
   and parse_func_call func_target inp =
@@ -567,7 +576,7 @@ end = struct
      >>= fun lhs ->
      s_parse_operator
      >>= function
-     | Operator "=" -> get_args >>= fun rhs -> return (LuaSet (lhs, rhs))
+     | "=" -> get_args >>= fun rhs -> return (LuaSet (lhs, rhs))
      | _ -> fail "Expected assignment")
       inp
 

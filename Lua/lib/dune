@@ -1,7 +1,7 @@
 (library
  (name lua_lib)
  (public_name Lua.Lib)
- (modules Ast Interpreter Parser utils Luatypes)
+ (modules Ast Interpreter Parser Utils)
  (libraries base)
  (preprocess
   (pps ppx_deriving.show ppx_inline_test))
