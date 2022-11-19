@@ -253,44 +253,38 @@ end = struct
      >>= fun re_e ->
      let ler = le_e.last_exec in
      let rer = re_e.last_exec in
-     let f =
-       match op with
-       | AOp aop ->
-         let actual =
-           match aop with
-           | Sub -> ( -. )
-           | Div -> ( /. )
-           | Mul -> ( *. )
-           | Add -> ( +. )
-           | Pow -> ( ** )
-         in
-         exec_num_op actual
-       | COp cop ->
-         let actual =
-           match cop with
-           | Ge -> ( >= )
-           | Le -> ( <= )
-           | Gt -> ( > )
-           | Lt -> ( < )
-           | Eq -> ( = )
-           | Ne -> ( <> )
-         in
-         exec_comp_op actual
-       | SOp sop ->
-         let actual =
-           match sop with
-           | Concat -> ( ^ )
-         in
-         exec_str_op actual
-       | LOp lop ->
-         let actual =
-           match lop with
-           | And -> ( && )
-           | Or -> ( || )
-         in
-         exec_bool_op actual
-     in
-     f ler rer re_e)
+     match op with
+     | AOp aop ->
+       let actual_op =
+         match aop with
+         | Sub -> ( -. )
+         | Div -> ( /. )
+         | Mul -> ( *. )
+         | Add -> ( +. )
+         | Pow -> ( ** )
+       in
+       exec_num_op actual_op ler rer re_e
+     | COp cop ->
+       let actual_op =
+         match cop with
+         | Ge -> ( >= )
+         | Le -> ( <= )
+         | Gt -> ( > )
+         | Lt -> ( < )
+         | Eq -> ( = )
+         | Ne -> ( <> )
+       in
+       exec_comp_op actual_op ler rer re_e
+     | SOp _ ->
+       let actual_op = ( ^ ) in
+       exec_str_op actual_op ler rer re_e
+     | LOp lop ->
+       let actual_op =
+         match lop with
+         | And -> ( && )
+         | Or -> ( || )
+       in
+       exec_bool_op actual_op ler rer re_e)
       ctx
 
   and get_from_table ctx t i =
