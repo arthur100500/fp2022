@@ -326,40 +326,35 @@ end = struct
     add_kvp ht ctx 1. kvp_e_list
 
   and exec_up_ctx interpreter ctx =
-    (return
-       { ctx with
-         vars = VarsMap.empty
-       ; previous = Some ctx
-       ; last_exec = Nil
-       ; level = ctx.level + 1
-       }
-    >>= fun _ ->
-    interpreter
+    (interpreter
     >>= fun chctx ->
     match chctx.previous with
     | Some c -> return c
     | None -> error "exit from global context")
-      ctx
+      { ctx with
+        vars = VarsMap.empty
+      ; previous = Some ctx
+      ; last_exec = Nil
+      ; level = ctx.level + 1
+      }
 
   and exec_loop_ctx interpreter ctx =
-    (return
-       { ctx with
-         vars = VarsMap.empty
-       ; previous = Some ctx
-       ; brk = Some ctx.level
-       ; last_exec = Nil
-       ; level = ctx.level + 1
-       }
-    >>= fun nctx ->
-    match interpreter nctx with
-    | Breaking ct -> return ct
-    | Returning e -> fun _ -> Returning e
-    | Error m -> error m
-    | Interpreted ct ->
-      (match ct.previous with
-       | Some c -> return c
-       | None -> error "exit from global context"))
-      ctx
+    (fun nctx ->
+      match interpreter nctx with
+      | Breaking ct -> Interpreted ct
+      | Returning e -> Returning e
+      | Error m -> Error m
+      | Interpreted ct ->
+        (match ct.previous with
+         | Some c -> Interpreted c
+         | None -> Error "exit from global context"))
+      { ctx with
+        vars = VarsMap.empty
+      ; previous = Some ctx
+      ; brk = Some ctx.level
+      ; last_exec = Nil
+      ; level = ctx.level + 1
+      }
 
   and exec_local_set idents exprs ctx =
     let set_ident id ex ctx =
