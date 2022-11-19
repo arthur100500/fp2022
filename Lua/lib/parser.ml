@@ -49,10 +49,29 @@ end = struct
   ;;
 
   let operators =
-    [ "and"; "or"; "+"; "-"; "/"; "*"; ">="; "<="; ">"; "<"; "=="; "^"; "not"; ".."; "=" ]
+    [ "and"
+    ; "or"
+    ; "+"
+    ; "-"
+    ; "/"
+    ; "*"
+    ; "~="
+    ; ">="
+    ; "<="
+    ; ">"
+    ; "<"
+    ; "=="
+    ; "^"
+    ; "not"
+    ; ".."
+    ; "="
+    ]
   ;;
 
-  let binops = [ "and"; "or"; "+"; "-"; "/"; "*"; ">"; ">="; "<"; "<="; "=="; "^"; ".." ]
+  let binops =
+    [ "and"; "or"; "+"; "-"; "/"; "*"; "~="; ">"; ">="; "<"; "<="; "=="; "^"; ".." ]
+  ;;
+
   let unops = [ "not"; "-" ]
 
   type input = char list
@@ -395,6 +414,30 @@ end = struct
     | _ -> 0
   ;;
 
+  let get_binop_type = function
+    | "and" -> Some (LOp And)
+    | "or" -> Some (LOp Or)
+    | "+" -> Some (AOp Add)
+    | "-" -> Some (AOp Sub)
+    | "/" -> Some (AOp Div)
+    | "*" -> Some (AOp Mul)
+    | "^" -> Some (AOp Pow)
+    | ">=" -> Some (COp Ge)
+    | "<=" -> Some (COp Le)
+    | ">" -> Some (COp Gt)
+    | "<" -> Some (COp Lt)
+    | "==" -> Some (COp Eq)
+    | "~=" -> Some (COp Ne)
+    | ".." -> Some (SOp Concat)
+    | _ -> None
+  ;;
+
+  let get_unop_type = function
+    | "not" -> Some Not
+    | "-" -> Some USub
+    | _ -> None
+  ;;
+
   (* parse expression *)
   let rec parse_expr inp = (parse_bin_op_expr <|> parse_primary_expr) inp
 
@@ -424,7 +467,13 @@ end = struct
       inp
 
   and parse_unary_op inp =
-    (s_parse_unop >>= fun op -> !!parse_primary_expr >>= fun e -> return (LuaUnOp (op, e)))
+    (s_parse_unop
+    >>= fun op ->
+    !!parse_primary_expr
+    >>= fun e ->
+    match get_unop_type op with
+    | Some uop -> return (LuaUnOp (uop, e))
+    | None -> fail ("Unknown operator " ^ op))
       inp
 
   (* parses binary operators with precedence*)
@@ -448,8 +497,9 @@ end = struct
           in
           (match rhs with
            | Parsed (rhs, t4) ->
-             let lhs = LuaBinOp (op1, lhs, rhs) in
-             parse_bin_op_rhs expr_recedence lhs t4
+             (match get_binop_type op1 with
+              | Some bop -> parse_bin_op_rhs expr_recedence (LuaBinOp (bop, lhs, rhs)) t4
+              | None -> HardFailed ("Unknown operator" ^ op1))
            | Failed m | HardFailed m -> Failed m)
         | _ -> HardFailed "Expected expression after operator")
     | _ -> Parsed (lhs, inp)

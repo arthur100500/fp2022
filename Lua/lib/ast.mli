@@ -7,9 +7,46 @@ module Ast : sig
 
   type block = statement list [@@deriving show { with_path = false }]
 
+  and unop =
+    | Not (** not *)
+    | USub (** - *)
+  [@@deriving show { with_path = false }]
+
+  and logic_binop =
+    | And (** and *)
+    | Or (** or *)
+  [@@deriving show { with_path = false }]
+
+  and arithm_binop =
+    | Add (** + *)
+    | Mul (** * *)
+    | Sub (** - *)
+    | Div (** / *)
+    | Pow (** ^ *)
+  [@@deriving show { with_path = false }]
+
+  and compare_binop =
+    | Le (** <= *)
+    | Ge (** >= *)
+    | Lt (** > *)
+    | Gt (** < *)
+    | Eq (** == *)
+    | Ne (** ~= *)
+  [@@deriving show { with_path = false }]
+
+  and string_binop = Concat [@@deriving show { with_path = false }]
+
+  and binop =
+    | LOp of logic_binop (** Logic operators: and, or*)
+    | AOp of arithm_binop (** Arithmetic operators: +. -. /, *, ^ *)
+    | COp of compare_binop (** Comparative operators: <=, >=, <, >, ==, ~= *)
+    | SOp of string_binop (** String operators: .. *)
+  [@@deriving show { with_path = false }]
+
   and expr_table_entry =
     | JustExpr of expr
-    | PairExpr of expr * expr
+        (** Just an expressinon, its index will be determined by position *)
+    | PairExpr of expr * expr (** Key/Value Pair ([key]=value)*)
 
   and lua_function = ident list * block
 
@@ -26,8 +63,8 @@ module Ast : sig
     | LuaVariable of ident (** obv. variable *)
     | LuaTableGet of expr * expr (** expr[expr] *)
     | LuaTableInit of expr_table_entry list (** {expr, expr, expr, ...} *)
-    | LuaBinOp of string * expr * expr (** expr binop expr *)
-    | LuaUnOp of string * expr (** unop expr*)
+    | LuaBinOp of binop * expr * expr (** expr binop expr *)
+    | LuaUnOp of unop * expr (** unop expr*)
     | LuaExprApply of apply (** expr(expr, ..., expr) *)
   [@@deriving show { with_path = false }]
 

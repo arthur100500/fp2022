@@ -27,7 +27,7 @@ end = struct
       | Nil
       | Table of LuaTableMap.t
       | Bool of bool
-    [@@deriving show]
+    [@@deriving show { with_path = false }]
 
     val from_const : const -> t
   end = struct
@@ -38,7 +38,7 @@ end = struct
       | Nil
       | Table of LuaTableMap.t
       | Bool of bool
-    [@@deriving show]
+    [@@deriving show { with_path = false }]
 
     let from_const = function
       | LuaString s -> String s
@@ -223,32 +223,27 @@ end = struct
     exec_expr le
     >>= fun ler ->
     match op with
-    | "not" -> exec_bool_uop not ler ler.last_exec
-    | "-" -> exec_num_uop (fun x -> 0. -. x) ler ler.last_exec
-    | _ -> error "operator is not implemented"
+    | Not -> exec_bool_uop not ler ler.last_exec
+    | USub -> exec_num_uop (fun x -> 0. -. x) ler ler.last_exec
 
   and exec_bin_op op le re ctx =
-    (let exec_num_op ler rer op last_ctx =
+    (let exec_num_op op ler rer last_ctx =
        match ler, rer with
        | Const.Number x, Const.Number y ->
          return { last_ctx with last_exec = Number (op x y) }
        | _ -> error "Attempt to do math with non numbers"
      in
-     let exec_str_op ler rer op last_ctx =
+     let exec_str_op op ler rer last_ctx =
        match ler, rer with
        | Const.String x, Const.String y ->
          return { last_ctx with last_exec = String (op x y) }
        | _ -> error "Attempt to do concatenation with non strings"
      in
-     let exec_bool_op ler rer op last_ctx =
+     let exec_bool_op op ler rer last_ctx =
        match ler, rer with
        | x, y -> return { last_ctx with last_exec = Bool (op (get_bool x) (get_bool y)) }
      in
-     let exec_eq_op ler rer op last_ctx =
-       match ler, rer with
-       | x, y -> return { last_ctx with last_exec = Bool (op x y) }
-     in
-     let exec_comp_op ler rer op last_ctx =
+     let exec_comp_op op ler rer last_ctx =
        match ler, rer with
        | x, y -> return { last_ctx with last_exec = Bool (op x y) }
      in
@@ -258,22 +253,44 @@ end = struct
      >>= fun re_e ->
      let ler = le_e.last_exec in
      let rer = re_e.last_exec in
-     match op with
-     | "*" -> exec_num_op ler rer ( *. ) re_e
-     | "+" -> exec_num_op ler rer ( +. ) re_e
-     | "-" -> exec_num_op ler rer ( -. ) re_e
-     | "/" -> exec_num_op ler rer ( /. ) re_e
-     | "^" -> exec_num_op ler rer ( ** ) re_e
-     | "and" -> exec_bool_op ler rer ( && ) re_e
-     | "or" -> exec_bool_op ler rer ( || ) re_e
-     | "<=" -> exec_comp_op ler rer ( <= ) re_e
-     | ">=" -> exec_comp_op ler rer ( >= ) re_e
-     | ">" -> exec_comp_op ler rer ( > ) re_e
-     | "<" -> exec_comp_op ler rer ( < ) re_e
-     | "==" -> exec_eq_op ler rer ( = ) re_e
-     | "~=" -> exec_eq_op ler rer ( <> ) re_e
-     | ".." -> exec_str_op ler rer ( ^ ) re_e
-     | _ -> error "operator is not implemented")
+     let f =
+       match op with
+       | AOp aop ->
+         let actual =
+           match aop with
+           | Sub -> ( -. )
+           | Div -> ( /. )
+           | Mul -> ( *. )
+           | Add -> ( +. )
+           | Pow -> ( ** )
+         in
+         exec_num_op actual
+       | COp cop ->
+         let actual =
+           match cop with
+           | Ge -> ( >= )
+           | Le -> ( <= )
+           | Gt -> ( > )
+           | Lt -> ( < )
+           | Eq -> ( = )
+           | Ne -> ( <> )
+         in
+         exec_comp_op actual
+       | SOp sop ->
+         let actual =
+           match sop with
+           | Concat -> ( ^ )
+         in
+         exec_str_op actual
+       | LOp lop ->
+         let actual =
+           match lop with
+           | And -> ( && )
+           | Or -> ( || )
+         in
+         exec_bool_op actual
+     in
+     f ler rer re_e)
       ctx
 
   and get_from_table ctx t i =
