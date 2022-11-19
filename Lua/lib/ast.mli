@@ -34,8 +34,7 @@ module Ast : sig
     | Ne (** ~= *)
   [@@deriving show { with_path = false }]
 
-  and string_binop = Concat (** .. *)
-   [@@deriving show { with_path = false }]
+  and string_binop = Concat (** .. *) [@@deriving show { with_path = false }]
 
   and binop =
     | LOp of logic_binop (** Logic operators: and, or*)
