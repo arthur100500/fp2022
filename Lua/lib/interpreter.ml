@@ -116,10 +116,12 @@ end = struct
   let show_context x = Format.asprintf "%a" pp_context x
 
   type interpreter_result =
-    | Interpreted of context
-    | Error of string
+    | Interpreted of context (** Normal interpretation result*)
+    | Error of string (** Failed interpretation result*)
     | Returning of context
+        (** Context that contains context to be returned, it is skipped by an bind operator. It should be handled in a function interpreter*)
     | Breaking of context
+        (** Context that contains context to be broken to, it is skipped by an bind operator. It should be handled in a loop interpreter*)
 
   type result =
     | Done of context
@@ -275,9 +277,7 @@ end = struct
          | Ne -> ( <> )
        in
        exec_comp_op actual_op ler rer re_e
-     | SOp _ ->
-       let actual_op = ( ^ ) in
-       exec_str_op actual_op ler rer re_e
+     | SOp Concat -> exec_str_op ( ^ ) ler rer re_e
      | LOp lop ->
        let actual_op =
          match lop with
