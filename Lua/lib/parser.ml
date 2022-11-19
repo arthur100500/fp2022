@@ -12,7 +12,7 @@ module Parser : sig
     | Failed of string
     | Parsed of 'a * input
     | HardFailed of string
-  (* HardFailed is used in case the error in parsing is severe, like a forgotten closing bracket. It indicates an error to be given back from parser*)
+        (** HardFailed is used in case the error in parsing is severe, like a forgotten closing bracket. It indicates an error to be given back from parser*)
 
   type 'a parser
 
@@ -378,20 +378,20 @@ end = struct
   let parse_bool_expr =
     s_parse_keyword
     >>= function
-    | "true" -> return (LuaConst (LuaBool true))
-    | "false" -> return (LuaConst (LuaBool false))
+    | "true" -> return (Const (Bool true))
+    | "false" -> return (Const (Bool false))
     | _ -> fail "boolean expected"
   ;;
 
   (* parses string as expression *)
-  let parse_string_expr = s_parse_string >>= fun s -> return (LuaConst (LuaString s))
+  let parse_string_expr = s_parse_string >>= fun s -> return (Const (String s))
 
   (* parses nil as expression *)
-  let parse_nil_expr = parse_specific_keyword "nil" *> return (LuaConst LuaNil)
+  let parse_nil_expr = parse_specific_keyword "nil" *> return (Const Nil)
 
   (* parses number as expression *)
   let parse_number_expr =
-    s_parse_number >>= fun n -> return (LuaConst (LuaNumber (float_of_string n)))
+    s_parse_number >>= fun n -> return (Const (Number (float_of_string n)))
   ;;
 
   (* delim parser*)
@@ -472,7 +472,7 @@ end = struct
     !!parse_primary_expr
     >>= fun e ->
     match get_unop_type op with
-    | Some uop -> return (LuaUnOp (uop, e))
+    | Some uop -> return (UnOp (uop, e))
     | None -> fail ("Unknown operator " ^ op))
       inp
 
@@ -498,7 +498,7 @@ end = struct
           (match rhs with
            | Parsed (rhs, t4) ->
              (match get_binop_type op1 with
-              | Some bop -> parse_bin_op_rhs expr_recedence (LuaBinOp (bop, lhs, rhs)) t4
+              | Some bop -> parse_bin_op_rhs expr_recedence (BinOp (bop, lhs, rhs)) t4
               | None -> HardFailed ("Unknown operator" ^ op1))
            | Failed m | HardFailed m -> Failed m)
         | _ -> HardFailed "Expected expression after operator")
@@ -512,24 +512,23 @@ end = struct
     (parse_primary_expr >>= fun lhs -> parse_bin_op_rhs 0 lhs) inp
 
   (* parses variable *)
-  and parse_var_expr inp = (s_parse_variable >>= fun v -> return (LuaVariable v)) inp
+  and parse_var_expr inp = (s_parse_variable >>= fun v -> return (Ast.Variable v)) inp
 
   (* parse (arg1, arg2...) and takes the first arg as the body *)
   and parse_func_call func_target inp =
     (s_parse_l_par *> delim_parser ~inner_parser:parse_expr ~sep_parser:s_parse_comma
     <* !!s_parse_r_par
     >>= fun args ->
-    return (LuaCall (func_target, args)) >>= fun apply -> return (LuaExprApply apply))
+    return (Call (func_target, args)) >>= fun apply -> return (ExprApply apply))
       inp
 
   (* parse table access expr[expr]*)
   and parse_table_access access_target inp =
     (s_parse_l_bracket *> parse_expr
     <* !!s_parse_r_bracket
-    >>= (fun index -> return (LuaTableGet (access_target, index)))
+    >>= (fun index -> return (TableGet (access_target, index)))
     <|> (s_parse_dot *> !!parse_ident
-        >>= fun index -> return (LuaTableGet (access_target, LuaConst (LuaString index)))
-        ))
+        >>= fun index -> return (TableGet (access_target, Const (String index)))))
       inp
 
   (* parse table init {expr, expr, ...}*)
@@ -538,16 +537,14 @@ end = struct
       s_parse_l_bracket *> parse_expr
       <* !!s_parse_r_bracket
       <* parse_assign_op
-      <|> (parse_ident
-          <* parse_assign_op
-          >>= fun idex -> return (LuaConst (LuaString idex)))
+      <|> (parse_ident <* parse_assign_op >>= fun idex -> return (Const (String idex)))
       >>= (fun key -> parse_expr >>= fun value -> return (PairExpr (key, value)))
       <|> (parse_expr >>= fun e -> return (JustExpr e))
     in
     (s_parse_l_curly_bracket
      *> delim_parser ~inner_parser:parse_kv_pair_or_value ~sep_parser:s_parse_comma
     <* s_parse_r_curly_bracket
-    >>= fun contents -> return (LuaTableInit contents))
+    >>= fun contents -> return (TableInit contents))
       inp
 
   (* parses function(a, b) type statement*)
@@ -557,7 +554,7 @@ end = struct
      *> delim_parser ~inner_parser:parse_ident ~sep_parser:s_parse_comma
     <* !!s_parse_r_par
     >>= fun args ->
-    parse_block !!parse_end >>= fun body -> return (LuaConst (LuaFunction (args, body))))
+    parse_block !!parse_end >>= fun body -> return (Const (Function (args, body))))
       inp
 
   (**** Parses statements ****)
@@ -578,7 +575,7 @@ end = struct
       inp
 
   (* parses expr as a statement for REPL *)
-  and parse_stat_expr inp = (parse_expr >>= fun e -> return (LuaExpr e)) inp
+  and parse_stat_expr inp = (parse_expr >>= fun e -> return (Expr e)) inp
 
   (* parses statements until end statement*)
   and parse_block end_parser inp =
@@ -604,8 +601,7 @@ end = struct
      parse_many
        (s_parse_l_bracket *> parse_expr
        <* !!s_parse_r_bracket
-       <|> (parse_dot *> !!parse_ident
-           >>= fun index -> return (LuaConst (LuaString index))))
+       <|> (parse_dot *> !!parse_ident >>= fun index -> return (Const (String index))))
      >>= fun table_accesses ->
      let rec form_lvalue initial = function
        | [] -> initial
@@ -625,7 +621,7 @@ end = struct
      >>= fun lhs ->
      s_parse_operator
      >>= function
-     | "=" -> get_args >>= fun rhs -> return (LuaSet (lhs, rhs))
+     | "=" -> get_args >>= fun rhs -> return (Set (lhs, rhs))
      | _ -> fail "Expected assignment")
       inp
 
@@ -653,12 +649,12 @@ end = struct
      parse_many parse_elseif
      >>= fun elseif_blocks ->
      wrap parse_else
-     >>= fun else_block -> return (LuaIf (condition, if_block, elseif_blocks, else_block)))
+     >>= fun else_block -> return (If (condition, if_block, elseif_blocks, else_block)))
       inp
 
   (* parses return statement*)
   and parse_return inp =
-    (parse_specific_keyword "return" *> wrap parse_expr >>= fun e -> return (LuaReturn e))
+    (parse_specific_keyword "return" *> wrap parse_expr >>= fun e -> return (Return e))
       inp
 
   (* parses local variable creation *)
@@ -670,20 +666,20 @@ end = struct
     >>= function
     | Some _ ->
       delim_parser ~inner_parser:parse_expr ~sep_parser:s_parse_comma
-      >>= fun assignments -> return (LuaLocal (local_vars, assignments))
-    | None -> return (LuaLocal (local_vars, [])))
+      >>= fun assignments -> return (Local (local_vars, assignments))
+    | None -> return (Local (local_vars, [])))
       inp
 
   (*parses while loop*)
   and parse_while inp =
     (parse_specific_keyword "while" *> !!parse_expr
-    >>= fun e -> !!parse_do_block >>= fun do_block -> return (LuaWhile (e, do_block)))
+    >>= fun e -> !!parse_do_block >>= fun do_block -> return (While (e, do_block)))
       inp
 
   (* parses repeat loop *)
   and parse_repeat inp =
     (parse_specific_keyword "repeat" *> !!(parse_block (parse_specific_keyword "until"))
-    >>= fun block -> parse_expr >>= fun ex -> return (LuaRepeat (block, ex)))
+    >>= fun block -> parse_expr >>= fun ex -> return (Repeat (block, ex)))
       inp
 
   (* parses for loop *)
@@ -697,15 +693,15 @@ end = struct
     >>= fun stop_ex ->
     wrap (s_parse_comma *> parse_expr)
     >>= fun step_ex ->
-    !!parse_do_block
-    >>= fun bl -> return (LuaFornum (vname, start_ex, stop_ex, step_ex, bl)))
+    !!parse_do_block >>= fun bl -> return (Fornum (vname, start_ex, stop_ex, step_ex, bl))
+    )
       inp
 
   (* a func call is also a statement due to side effects in func calls. Should be called after other *)
   and parse_func_call_statement inp =
     (parse_primary_expr
     >>= function
-    | LuaExprApply e -> return (LuaStatementApply e)
+    | ExprApply e -> return (StatementApply e)
     | _ -> fail "expected function call")
       inp
 
@@ -713,7 +709,7 @@ end = struct
   and parse_do_block inp = (parse_specific_keyword "do" *> !!(parse_block parse_end)) inp
 
   (* parses statements starting with do and ending with end but wrapped *)
-  and parse_do_block_wrapped inp = (parse_do_block >>= fun bl -> return (LuaDo bl)) inp
+  and parse_do_block_wrapped inp = (parse_do_block >>= fun bl -> return (Do bl)) inp
 
   (* parses for in loop *)
   and parse_for_in inp =
@@ -722,15 +718,15 @@ end = struct
     >>= fun fl_lhs ->
     parse_specific_keyword "in"
     *> delim_parser ~inner_parser:parse_expr ~sep_parser:s_parse_comma
-    >>= fun fl_rhs ->
-    parse_do_block >>= fun body -> return (LuaForin (fl_lhs, fl_rhs, body)))
+    >>= fun fl_rhs -> parse_do_block >>= fun body -> return (Forin (fl_lhs, fl_rhs, body))
+    )
       inp
 
   (* parses end keyword*)
   and parse_end = parse_specific_keyword "end"
 
   (* parses break in a loop *)
-  and parse_break = parse_specific_keyword "break" *> return LuaBreak
+  and parse_break = parse_specific_keyword "break" *> return Break
 
   (* parses function declare*)
   and parse_function_declare inp =
@@ -739,7 +735,7 @@ end = struct
     !!s_parse_l_par *> delim_parser ~inner_parser:parse_ident ~sep_parser:s_parse_comma
     <* !!s_parse_r_par
     >>= fun args ->
-    parse_block parse_end >>= fun body -> return (LuaFunctionDeclare (name, args, body)))
+    parse_block parse_end >>= fun body -> return (FunctionDeclare (name, args, body)))
       inp
   ;;
 

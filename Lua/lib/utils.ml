@@ -16,8 +16,3 @@ let isChar x =
 ;;
 
 let isDigit x = Char.code x >= 48 && Char.code x <= 57
-
-type 'a maybe =
-  | Some of 'a
-  | None
-[@@deriving show { with_path = false }]

@@ -1,73 +1,57 @@
   $ ./demoParse.exe <<-EOF
   > 34 'string =)' {1, 2}
   > EOF
-  [(LuaExpr (LuaConst (LuaNumber 34.)));
-    (LuaExpr (LuaConst (LuaString "string =)")));
-    (LuaExpr
-       (LuaTableInit
-          [(JustExpr (LuaConst (LuaNumber 1.)));
-            (JustExpr (LuaConst (LuaNumber 2.)))]))
+  [(Expr (Const (Number 34.))); (Expr (Const (String "string =)")));
+    (Expr
+       (TableInit
+          [(JustExpr (Const (Number 1.))); (JustExpr (Const (Number 2.)))]))
     ]
   $ ./demoParse.exe <<-EOF
   > a[b], c = 3, 4, 5
   > EOF
-  [(LuaSet ([(Index ((Ident "a"), (LuaVariable "b"))); (Ident "c")],
-      [(LuaConst (LuaNumber 3.)); (LuaConst (LuaNumber 4.));
-        (LuaConst (LuaNumber 5.))]
-      ))
+  [(Set ([(Index ((Ident "a"), (Variable "b"))); (Ident "c")],
+      [(Const (Number 3.)); (Const (Number 4.)); (Const (Number 5.))]))
     ]
   $ ./demoParse.exe <<-EOF
   > {} {b=3} {1} {1, 2} {1, b=2} {{}} {{}, 123} {[x] = x}
   > EOF
-  [(LuaExpr (LuaTableInit []));
-    (LuaExpr
-       (LuaTableInit
-          [(PairExpr ((LuaConst (LuaString "b")), (LuaConst (LuaNumber 3.))))]));
-    (LuaExpr (LuaTableInit [(JustExpr (LuaConst (LuaNumber 1.)))]));
-    (LuaExpr
-       (LuaTableInit
-          [(JustExpr (LuaConst (LuaNumber 1.)));
-            (JustExpr (LuaConst (LuaNumber 2.)))]));
-    (LuaExpr
-       (LuaTableInit
-          [(JustExpr (LuaConst (LuaNumber 1.)));
-            (PairExpr ((LuaConst (LuaString "b")), (LuaConst (LuaNumber 2.))))]));
-    (LuaExpr (LuaTableInit [(JustExpr (LuaTableInit []))]));
-    (LuaExpr
-       (LuaTableInit
-          [(JustExpr (LuaTableInit [])); (JustExpr (LuaConst (LuaNumber 123.)))
-            ]));
-    (LuaExpr (LuaTableInit [(PairExpr ((LuaVariable "x"), (LuaVariable "x")))]))
-    ]
+  [(Expr (TableInit []));
+    (Expr (TableInit [(PairExpr ((Const (String "b")), (Const (Number 3.))))]));
+    (Expr (TableInit [(JustExpr (Const (Number 1.)))]));
+    (Expr
+       (TableInit
+          [(JustExpr (Const (Number 1.))); (JustExpr (Const (Number 2.)))]));
+    (Expr
+       (TableInit
+          [(JustExpr (Const (Number 1.)));
+            (PairExpr ((Const (String "b")), (Const (Number 2.))))]));
+    (Expr (TableInit [(JustExpr (TableInit []))]));
+    (Expr
+       (TableInit [(JustExpr (TableInit [])); (JustExpr (Const (Number 123.)))]));
+    (Expr (TableInit [(PairExpr ((Variable "x"), (Variable "x")))]))]
   $ ./demoParse.exe <<-EOF
   > a.b = 3 a.b.b.b = 3 a[b].c[d] = 3 a[4 + 1] = 3 + 2
   > EOF
-  [(LuaSet ([(Index ((Ident "a"), (LuaConst (LuaString "b"))))],
-      [(LuaConst (LuaNumber 3.))]));
-    (LuaSet (
+  [(Set ([(Index ((Ident "a"), (Const (String "b"))))], [(Const (Number 3.))]));
+    (Set (
        [(Index (
-           (Index ((Index ((Ident "a"), (LuaConst (LuaString "b")))),
-              (LuaConst (LuaString "b")))),
-           (LuaConst (LuaString "b"))))
+           (Index ((Index ((Ident "a"), (Const (String "b")))),
+              (Const (String "b")))),
+           (Const (String "b"))))
          ],
-       [(LuaConst (LuaNumber 3.))]));
-    (LuaSet (
+       [(Const (Number 3.))]));
+    (Set (
        [(Index (
-           (Index ((Index ((Ident "a"), (LuaVariable "b"))),
-              (LuaConst (LuaString "c")))),
-           (LuaVariable "d")))
+           (Index ((Index ((Ident "a"), (Variable "b"))), (Const (String "c"))
+              )),
+           (Variable "d")))
          ],
-       [(LuaConst (LuaNumber 3.))]));
-    (LuaSet (
+       [(Const (Number 3.))]));
+    (Set (
        [(Index ((Ident "a"),
-           (LuaBinOp ((AOp Add), (LuaConst (LuaNumber 4.)),
-              (LuaConst (LuaNumber 1.))))
-           ))
+           (BinOp ((AOp Add), (Const (Number 4.)), (Const (Number 1.))))))
          ],
-       [(LuaBinOp ((AOp Add), (LuaConst (LuaNumber 3.)),
-           (LuaConst (LuaNumber 2.))))
-         ]
-       ))
+       [(BinOp ((AOp Add), (Const (Number 3.)), (Const (Number 2.))))]))
     ]
   $ ./demoParse.exe <<-EOF
   > if a then b elseif c then d else e end
@@ -81,19 +65,18 @@
   > return 4
   > break
   > EOF
-  [(LuaIf ((LuaVariable "a"), [(LuaExpr (LuaVariable "b"))],
-      [((LuaVariable "c"), [(LuaExpr (LuaVariable "d"))])],
-      (Some [(LuaExpr (LuaVariable "e"))])));
-    (LuaIf ((LuaVariable "a"), [(LuaExpr (LuaVariable "b"))], [], None));
-    (LuaIf ((LuaVariable "a"), [(LuaExpr (LuaVariable "b"))], [],
-       (Some [(LuaExpr (LuaVariable "c"))])));
-    (LuaFornum ("i", (LuaConst (LuaNumber 1.)), (LuaConst (LuaNumber 2.)),
-       (Some (LuaConst (LuaNumber 3.))), []));
-    (LuaFornum ("i", (LuaConst (LuaNumber 1.)), (LuaConst (LuaNumber 2.)),
-       None, []));
-    (LuaWhile ((LuaVariable "a"), [(LuaExpr (LuaVariable "b"))]));
-    (LuaRepeat ([(LuaExpr (LuaVariable "a"))], (LuaVariable "b")));
-    (LuaReturn None); (LuaReturn (Some (LuaConst (LuaNumber 4.)))); LuaBreak]
+  [(If ((Variable "a"), [(Expr (Variable "b"))],
+      [((Variable "c"), [(Expr (Variable "d"))])],
+      (Some [(Expr (Variable "e"))])));
+    (If ((Variable "a"), [(Expr (Variable "b"))], [], None));
+    (If ((Variable "a"), [(Expr (Variable "b"))], [],
+       (Some [(Expr (Variable "c"))])));
+    (Fornum ("i", (Const (Number 1.)), (Const (Number 2.)),
+       (Some (Const (Number 3.))), []));
+    (Fornum ("i", (Const (Number 1.)), (Const (Number 2.)), None, []));
+    (While ((Variable "a"), [(Expr (Variable "b"))]));
+    (Repeat ([(Expr (Variable "a"))], (Variable "b"))); (Return None);
+    (Return (Some (Const (Number 4.)))); Break]
   $ ./demoParse.exe <<-EOF
   > 1 "3" true b {}
   > a(1, {}, b)
@@ -112,81 +95,71 @@
   > not true and not false or true
   > true and not false
   > EOF
-  [(LuaExpr (LuaConst (LuaNumber 1.))); (LuaExpr (LuaConst (LuaString "3")));
-    (LuaExpr (LuaConst (LuaBool true))); (LuaExpr (LuaVariable "b"));
-    (LuaExpr (LuaTableInit []));
-    (LuaStatementApply
-       (LuaCall ((LuaVariable "a"),
-          [(LuaConst (LuaNumber 1.)); (LuaTableInit []); (LuaVariable "b")])));
-    (LuaExpr (LuaTableGet ((LuaVariable "a"), (LuaConst (LuaString "b")))));
-    (LuaExpr (LuaTableGet ((LuaVariable "a"), (LuaVariable "b"))));
-    (LuaExpr
-       (LuaBinOp ((AOp Add), (LuaConst (LuaNumber 1.)),
-          (LuaConst (LuaNumber 2.)))));
-    (LuaExpr
-       (LuaBinOp ((AOp Add), (LuaConst (LuaNumber 1.)),
-          (LuaBinOp ((AOp Mul), (LuaConst (LuaNumber 2.)),
-             (LuaConst (LuaNumber 3.))))
+  [(Expr (Const (Number 1.))); (Expr (Const (String "3")));
+    (Expr (Const (Bool true))); (Expr (Variable "b")); (Expr (TableInit []));
+    (StatementApply
+       (Call ((Variable "a"),
+          [(Const (Number 1.)); (TableInit []); (Variable "b")])));
+    (Expr (TableGet ((Variable "a"), (Const (String "b")))));
+    (Expr (TableGet ((Variable "a"), (Variable "b"))));
+    (Expr (BinOp ((AOp Add), (Const (Number 1.)), (Const (Number 2.)))));
+    (Expr
+       (BinOp ((AOp Add), (Const (Number 1.)),
+          (BinOp ((AOp Mul), (Const (Number 2.)), (Const (Number 3.)))))));
+    (Expr
+       (BinOp ((AOp Add),
+          (BinOp ((AOp Mul), (Const (Number 1.)), (Const (Number 2.)))),
+          (Const (Number 3.)))));
+    (Expr
+       (BinOp ((AOp Add),
+          (BinOp ((AOp Add), (Const (Number 1.)),
+             (BinOp ((AOp Mul), (Const (Number 2.)), (Const (Number 3.)))))),
+          (BinOp ((AOp Mul), (Const (Number 4.)),
+             (BinOp ((AOp Pow), (Const (Number 5.)), (Const (Number 6.))))))
           )));
-    (LuaExpr
-       (LuaBinOp ((AOp Add),
-          (LuaBinOp ((AOp Mul), (LuaConst (LuaNumber 1.)),
-             (LuaConst (LuaNumber 2.)))),
-          (LuaConst (LuaNumber 3.)))));
-    (LuaExpr
-       (LuaBinOp ((AOp Add),
-          (LuaBinOp ((AOp Add), (LuaConst (LuaNumber 1.)),
-             (LuaBinOp ((AOp Mul), (LuaConst (LuaNumber 2.)),
-                (LuaConst (LuaNumber 3.))))
-             )),
-          (LuaBinOp ((AOp Mul), (LuaConst (LuaNumber 4.)),
-             (LuaBinOp ((AOp Pow), (LuaConst (LuaNumber 5.)),
-                (LuaConst (LuaNumber 6.))))
-             ))
-          )));
-    (LuaExpr
-       (LuaBinOp ((AOp Sub),
-          (LuaBinOp ((AOp Sub),
-             (LuaBinOp ((AOp Sub),
-                (LuaBinOp ((AOp Add), (LuaConst (LuaNumber 1.)),
-                   (LuaBinOp ((AOp Mul), (LuaConst (LuaNumber 2.)),
-                      (LuaConst (LuaNumber 3.))))
+    (Expr
+       (BinOp ((AOp Sub),
+          (BinOp ((AOp Sub),
+             (BinOp ((AOp Sub),
+                (BinOp ((AOp Add), (Const (Number 1.)),
+                   (BinOp ((AOp Mul), (Const (Number 2.)), (Const (Number 3.))
+                      ))
                    )),
-                (LuaConst (LuaNumber 4.)))),
-             (LuaConst (LuaNumber 5.)))),
-          (LuaConst (LuaNumber 6.)))));
-    (LuaExpr
-       (LuaBinOp ((AOp Add),
-          (LuaBinOp ((AOp Sub),
-             (LuaBinOp ((AOp Sub),
-                (LuaBinOp ((AOp Sub),
-                   (LuaBinOp ((AOp Sub),
-                      (LuaBinOp ((AOp Pow), (LuaConst (LuaNumber 1.)),
-                         (LuaConst (LuaNumber 2.)))),
-                      (LuaBinOp ((AOp Mul), (LuaConst (LuaNumber 3.)),
-                         (LuaBinOp ((AOp Pow), (LuaConst (LuaNumber 5.)),
-                            (LuaConst (LuaNumber 5.))))
+                (Const (Number 4.)))),
+             (Const (Number 5.)))),
+          (Const (Number 6.)))));
+    (Expr
+       (BinOp ((AOp Add),
+          (BinOp ((AOp Sub),
+             (BinOp ((AOp Sub),
+                (BinOp ((AOp Sub),
+                   (BinOp ((AOp Sub),
+                      (BinOp ((AOp Pow), (Const (Number 1.)),
+                         (Const (Number 2.)))),
+                      (BinOp ((AOp Mul), (Const (Number 3.)),
+                         (BinOp ((AOp Pow), (Const (Number 5.)),
+                            (Const (Number 5.))))
                          ))
                       )),
-                   (LuaConst (LuaNumber 7.)))),
-                (LuaConst (LuaNumber 5.)))),
-             (LuaConst (LuaNumber 5.)))),
-          (LuaConst (LuaNumber 1.)))));
-    (LuaExpr (LuaUnOp (Not, (LuaConst (LuaBool false)))));
-    (LuaExpr
-       (LuaBinOp ((LOp Or), (LuaUnOp (Not, (LuaConst (LuaBool true)))),
-          (LuaConst (LuaNumber 4.)))));
-    (LuaExpr
-       (LuaBinOp ((LOp Or),
-          (LuaBinOp ((LOp And), (LuaUnOp (Not, (LuaConst (LuaBool true)))),
-             (LuaConst (LuaNumber 4.)))),
-          (LuaConst (LuaBool false)))));
-    (LuaExpr
-       (LuaBinOp ((LOp Or),
-          (LuaBinOp ((LOp And), (LuaUnOp (Not, (LuaConst (LuaBool true)))),
-             (LuaUnOp (Not, (LuaConst (LuaBool false)))))),
-          (LuaConst (LuaBool true)))));
-    (LuaExpr
-       (LuaBinOp ((LOp And), (LuaConst (LuaBool true)),
-          (LuaUnOp (Not, (LuaConst (LuaBool false)))))))
+                   (Const (Number 7.)))),
+                (Const (Number 5.)))),
+             (Const (Number 5.)))),
+          (Const (Number 1.)))));
+    (Expr (UnOp (Not, (Const (Bool false)))));
+    (Expr
+       (BinOp ((LOp Or), (UnOp (Not, (Const (Bool true)))), (Const (Number 4.))
+          )));
+    (Expr
+       (BinOp ((LOp Or),
+          (BinOp ((LOp And), (UnOp (Not, (Const (Bool true)))),
+             (Const (Number 4.)))),
+          (Const (Bool false)))));
+    (Expr
+       (BinOp ((LOp Or),
+          (BinOp ((LOp And), (UnOp (Not, (Const (Bool true)))),
+             (UnOp (Not, (Const (Bool false)))))),
+          (Const (Bool true)))));
+    (Expr
+       (BinOp ((LOp And), (Const (Bool true)),
+          (UnOp (Not, (Const (Bool false)))))))
     ]

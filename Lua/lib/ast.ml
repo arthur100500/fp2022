@@ -5,19 +5,17 @@
 module Ast = struct
   type ident = string [@@deriving show { with_path = false }]
 
-  type block = statement list [@@deriving show { with_path = false }]
-
-  and unop =
+  type unop =
     | Not
     | USub
   [@@deriving show { with_path = false }]
 
-  and logic_binop =
+  type logic_binop =
     | And
     | Or
   [@@deriving show { with_path = false }]
 
-  and arithm_binop =
+  type arithm_binop =
     | Add
     | Mul
     | Sub
@@ -25,7 +23,7 @@ module Ast = struct
     | Pow
   [@@deriving show { with_path = false }]
 
-  and compare_binop =
+  type compare_binop =
     | Le
     | Ge
     | Lt
@@ -34,55 +32,57 @@ module Ast = struct
     | Ne
   [@@deriving show { with_path = false }]
 
-  and string_binop = Concat [@@deriving show { with_path = false }]
+  type string_binop = Concat [@@deriving show { with_path = false }]
 
-  and binop =
+  type binop =
     | LOp of logic_binop
     | AOp of arithm_binop
     | COp of compare_binop
     | SOp of string_binop
   [@@deriving show { with_path = false }]
 
+  type block = statement list [@@deriving show { with_path = false }]
+
   and expr_table_entry =
     | JustExpr of expr
     | PairExpr of expr * expr
 
-  and lua_function = ident list * block
+  and l_function = ident list * block
 
   and const =
-    | LuaBool of bool
-    | LuaNumber of float
-    | LuaString of string
-    | LuaFunction of lua_function
-    | LuaNil
+    | Bool of bool
+    | Number of float
+    | String of string
+    | Function of l_function
+    | Nil
   [@@deriving show { with_path = false }]
 
   and expr =
-    | LuaConst of const
-    | LuaVariable of ident
-    | LuaTableGet of expr * expr
-    | LuaTableInit of expr_table_entry list
-    | LuaBinOp of binop * expr * expr
-    | LuaUnOp of unop * expr
-    | LuaExprApply of apply
+    | Const of const
+    | Variable of ident
+    | TableGet of expr * expr
+    | TableInit of expr_table_entry list
+    | BinOp of binop * expr * expr
+    | UnOp of unop * expr
+    | ExprApply of apply
   [@@deriving show { with_path = false }]
 
-  and apply = LuaCall of expr * expr list [@@deriving show { with_path = false }]
+  and apply = Call of expr * expr list [@@deriving show { with_path = false }]
 
   and statement =
-    | LuaDo of block
-    | LuaSet of lvalue list * expr list
-    | LuaWhile of expr * block
-    | LuaRepeat of block * expr
-    | LuaIf of expr * block * elseif_block list * block option
-    | LuaFornum of ident * expr * expr * expr option * block
-    | LuaForin of ident list * expr list * block
-    | LuaLocal of ident list * expr list
-    | LuaReturn of expr option
-    | LuaBreak
-    | LuaStatementApply of apply
-    | LuaFunctionDeclare of lvalue * ident list * block
-    | LuaExpr of expr
+    | Do of block
+    | Set of lvalue list * expr list
+    | While of expr * block
+    | Repeat of block * expr
+    | If of expr * block * elseif_block list * block option
+    | Fornum of ident * expr * expr * expr option * block
+    | Forin of ident list * expr list * block
+    | Local of ident list * expr list
+    | Return of expr option
+    | Break
+    | StatementApply of apply
+    | FunctionDeclare of lvalue * ident list * block
+    | Expr of expr
   [@@deriving show { with_path = false }]
 
   and lvalue =

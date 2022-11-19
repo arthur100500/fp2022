@@ -21,9 +21,9 @@ end = struct
     type t =
       | String of string
       | Number of float
-      | Function of Ast.lua_function
+      | Function of Ast.l_function
       | Nil
-      | Table of LuaTableMap.t
+      | Table of TableMap.t
       | Bool of bool
     [@@deriving show { with_path = false }]
 
@@ -32,22 +32,22 @@ end = struct
     type t =
       | String of string
       | Number of float
-      | Function of Ast.lua_function
+      | Function of Ast.l_function
       | Nil
-      | Table of LuaTableMap.t
+      | Table of TableMap.t
       | Bool of bool
     [@@deriving show { with_path = false }]
 
     let from_const = function
-      | LuaString s -> String s
-      | LuaNumber n -> Number n
-      | LuaBool b -> Bool b
-      | LuaNil -> Nil
-      | LuaFunction f -> Function f
+      | Ast.String s -> String s
+      | Ast.Number n -> Number n
+      | Ast.Bool b -> Bool b
+      | Ast.Nil -> Nil
+      | Ast.Function f -> Function f
     ;;
   end
 
-  and LuaTableMap : sig
+  and TableMap : sig
     type t [@@deriving show]
 
     val empty : t
@@ -134,9 +134,7 @@ end = struct
    fun i f c ->
     match i c with
     | Interpreted c2 -> f c2 c2
-    | Error s -> Error s
-    | Returning s -> Returning s
-    | Breaking s -> Breaking s
+    | e -> e
  ;;
 
   let return_le res ctx = return { ctx with last_exec = res }
@@ -151,13 +149,13 @@ end = struct
 
   let rec exec_expr ex ctx =
     match ex with
-    | LuaConst c -> return_le (Const.from_const c) ctx ctx
-    | LuaVariable v -> (get_var v (Some ctx)) ctx ctx
-    | LuaTableGet (t, i) -> get_from_table ctx t i
-    | LuaTableInit el -> create_table ctx el ctx
-    | LuaUnOp (op, le) -> exec_un_op op le ctx
-    | LuaBinOp (op, le, re) -> exec_bin_op op le re ctx
-    | LuaExprApply apply -> exec_fun apply ctx ctx
+    | Const c -> return_le (Const.from_const c) ctx ctx
+    | Variable v -> (get_var v (Some ctx)) ctx ctx
+    | TableGet (t, i) -> get_from_table ctx t i
+    | TableInit el -> create_table ctx el ctx
+    | UnOp (op, le) -> exec_un_op op le ctx
+    | BinOp (op, le, re) -> exec_bin_op op le re ctx
+    | ExprApply apply -> exec_fun apply ctx ctx
 
   and exec_fun apply ctx =
     (* Hardcoded functions *)
@@ -178,11 +176,11 @@ end = struct
         print_vars t h_res
     in
     match apply with
-    | LuaCall (fn, args) ->
+    | Call (fn, args) ->
       (* Hardcoded functions *)
       (match fn with
-       | LuaVariable "print" -> print_vars args ctx
-       | LuaVariable "pctx" ->
+       | Variable "print" -> print_vars args ctx
+       | Variable "pctx" ->
          print_endline (show_context ctx);
          return ctx
        | _ ->
@@ -302,14 +300,14 @@ end = struct
     >>= fun i_e ->
     match t_e.last_exec with
     | Table ht ->
-      (match LuaTableMap.find_opt i_e.last_exec ht with
+      (match TableMap.find_opt i_e.last_exec ht with
        | Some v -> return { ctx with last_exec = v }
        | None -> return { ctx with last_exec = Nil })
     | _ -> error "Taking index from non table")
       ctx
 
   and create_table ctx kvp_e_list =
-    let ht = LuaTableMap.empty in
+    let ht = TableMap.empty in
     let rec add_kvp tbl ictx li = function
       | [] -> return { ictx with last_exec = Table tbl }
       | h :: t ->
@@ -319,11 +317,11 @@ end = struct
            >>= fun k_e ->
            exec_expr v
            >>= fun v_e ->
-           add_kvp (LuaTableMap.replace k_e.last_exec v_e.last_exec tbl) v_e li t
+           add_kvp (TableMap.replace k_e.last_exec v_e.last_exec tbl) v_e li t
          | JustExpr v ->
            exec_expr v
            >>= fun v_e ->
-           add_kvp (LuaTableMap.replace (Number li) v_e.last_exec tbl) v_e (li +. 1.) t)
+           add_kvp (TableMap.replace (Number li) v_e.last_exec tbl) v_e (li +. 1.) t)
     in
     add_kvp ht ctx 1. kvp_e_list
 
@@ -374,29 +372,28 @@ end = struct
       | ih :: it, ah :: at -> set_ident ih ah >>= fun nctx -> helper nctx (it, at)
       | ih :: it, _ ->
         return ctx
-        >>= fun _ -> set_ident ih (LuaConst LuaNil) >>= fun nctx -> helper nctx (it, [])
+        >>= fun _ -> set_ident ih (Const Nil) >>= fun nctx -> helper nctx (it, [])
       | _, _ -> return ctx
     in
     helper ctx (idents, exprs) ctx
 
   and exec_stat stat ctx =
     match stat with
-    | LuaExpr expr ->
-      exec_stat (LuaStatementApply (LuaCall (LuaVariable "print", [ expr ]))) ctx
-    | LuaSet (le, re) -> exec_set le re ctx
-    | LuaLocal (ids, exps) -> exec_local_set ids exps ctx
-    | LuaDo block -> exec_up_ctx (exec_many block) ctx
-    | LuaIf (ifexpr, block, elseif_blocks, else_block) ->
+    | Expr expr -> exec_stat (StatementApply (Call (Variable "print", [ expr ]))) ctx
+    | Set (le, re) -> exec_set le re ctx
+    | Local (ids, exps) -> exec_local_set ids exps ctx
+    | Do block -> exec_up_ctx (exec_many block) ctx
+    | If (ifexpr, block, elseif_blocks, else_block) ->
       exec_up_ctx (exec_if ifexpr block elseif_blocks else_block) ctx
-    | LuaStatementApply apply -> exec_expr (LuaExprApply apply) ctx
-    | LuaReturn ex -> exec_return ex ctx
-    | LuaFunctionDeclare (id, ids, blk) -> exec_set_one id (Const.Function (ids, blk)) ctx
-    | LuaBreak -> exec_break ctx
-    | LuaWhile (ex, blck) -> exec_loop_ctx (exec_while ex blck) ctx
-    | LuaRepeat (blck, ex) -> exec_loop_ctx (exec_until blck ex) ctx
-    | LuaFornum (ident, st, en, step, blck) ->
+    | StatementApply apply -> exec_expr (ExprApply apply) ctx
+    | Return ex -> exec_return ex ctx
+    | FunctionDeclare (id, ids, blk) -> exec_set_one id (Const.Function (ids, blk)) ctx
+    | Break -> exec_break ctx
+    | While (ex, blck) -> exec_loop_ctx (exec_while ex blck) ctx
+    | Repeat (blck, ex) -> exec_loop_ctx (exec_until blck ex) ctx
+    | Fornum (ident, st, en, step, blck) ->
       exec_loop_ctx (exec_for_num ident st en step blck) ctx
-    | LuaForin (_, _, _) -> error "For in loop is not implemented yet =( " ctx
+    | Forin (_, _, _) -> error "For in loop is not implemented yet =( " ctx
 
   and exec_for_num id bg ed st blck =
     exec_expr bg
@@ -406,7 +403,7 @@ end = struct
     exec_expr
       (match st with
        | Some s -> s
-       | None -> LuaConst (LuaNumber 1.))
+       | None -> Const (Number 1.))
     >>= fun loop_step ->
     match loop_begin.last_exec, loop_end.last_exec, loop_step.last_exec with
     | Number lbegin, Number lend, Number lstep ->
@@ -416,7 +413,7 @@ end = struct
         with
         | false -> return ctx
         | true ->
-          exec_local_set [ id ] [ LuaConst (LuaNumber (lbegin +. (iter *. lstep))) ]
+          exec_local_set [ id ] [ Const (Number (lbegin +. (iter *. lstep))) ]
           >>= fun _ -> exec_many blck >>= fun nctx -> loop_iter (iter +. 1.) nctx
       in
       loop_iter 0. loop_step
@@ -457,7 +454,7 @@ end = struct
     exec_expr
       (match ex with
        | Some e -> e
-       | None -> LuaConst LuaNil)
+       | None -> Const Nil)
     >>= fun ctx ->
     let rec find_ctx lvl c =
       if c.level = lvl
@@ -542,12 +539,12 @@ end = struct
       let primal_id, const_lst, ctx = indexes_to_list index ctx in
       let rec replace_in_table klst tbl =
         match klst with
-        | h :: [] -> Some (LuaTableMap.replace h re tbl)
+        | h :: [] -> Some (TableMap.replace h re tbl)
         | h :: t ->
-          (match LuaTableMap.find_opt h tbl with
+          (match TableMap.find_opt h tbl with
            | Some (Table ntbl) ->
              (match replace_in_table t ntbl with
-              | Some nntbl -> Some (LuaTableMap.replace h (Table nntbl) tbl)
+              | Some nntbl -> Some (TableMap.replace h (Table nntbl) tbl)
               | None -> None)
            | _ -> None)
         | [] -> Some tbl

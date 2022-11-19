@@ -5,19 +5,17 @@
 module Ast : sig
   type ident = string [@@deriving show { with_path = false }]
 
-  type block = statement list [@@deriving show { with_path = false }]
-
-  and unop =
+  type unop =
     | Not (** not *)
     | USub (** - *)
   [@@deriving show { with_path = false }]
 
-  and logic_binop =
+  type logic_binop =
     | And (** and *)
     | Or (** or *)
   [@@deriving show { with_path = false }]
 
-  and arithm_binop =
+  type arithm_binop =
     | Add (** + *)
     | Mul (** * *)
     | Sub (** - *)
@@ -25,7 +23,7 @@ module Ast : sig
     | Pow (** ^ *)
   [@@deriving show { with_path = false }]
 
-  and compare_binop =
+  type compare_binop =
     | Le (** <= *)
     | Ge (** >= *)
     | Lt (** > *)
@@ -34,60 +32,62 @@ module Ast : sig
     | Ne (** ~= *)
   [@@deriving show { with_path = false }]
 
-  and string_binop = Concat (** .. *) [@@deriving show { with_path = false }]
+  type string_binop = Concat (** .. *) [@@deriving show { with_path = false }]
 
-  and binop =
+  type binop =
     | LOp of logic_binop (** Logic operators: and, or*)
     | AOp of arithm_binop (** Arithmetic operators: +. -. /, *, ^ *)
     | COp of compare_binop (** Comparative operators: <=, >=, <, >, ==, ~= *)
     | SOp of string_binop (** String operators: .. *)
   [@@deriving show { with_path = false }]
 
+  type block = statement list [@@deriving show { with_path = false }]
+
   and expr_table_entry =
     | JustExpr of expr
         (** Just an expressinon, its index will be determined by position *)
     | PairExpr of expr * expr (** Key/Value Pair ([key]=value)*)
 
-  and lua_function = ident list * block
+  and l_function = ident list * block
 
   and const =
-    | LuaBool of bool (** true | false *)
-    | LuaNumber of float (** 1, 2.3, 3, ...*)
-    | LuaString of string (** "abc" *)
-    | LuaFunction of lua_function (** function(args) block end *)
-    | LuaNil (** nil *)
+    | Bool of bool (** true | false *)
+    | Number of float (** 1, 2.3, 3, ...*)
+    | String of string (** "abc" *)
+    | Function of l_function (** function(args) block end *)
+    | Nil (** nil *)
   [@@deriving show { with_path = false }, ord]
 
   and expr =
-    | LuaConst of const (** number or string or ..., written in const *)
-    | LuaVariable of ident (** obv. variable *)
-    | LuaTableGet of expr * expr (** expr[expr] *)
-    | LuaTableInit of expr_table_entry list (** {expr, expr, expr, ...} *)
-    | LuaBinOp of binop * expr * expr (** expr binop expr *)
-    | LuaUnOp of unop * expr (** unop expr*)
-    | LuaExprApply of apply (** expr(expr, ..., expr) *)
+    | Const of const (** number or string or ..., written in const *)
+    | Variable of ident (** obv. variable *)
+    | TableGet of expr * expr (** expr[expr] *)
+    | TableInit of expr_table_entry list (** {expr, expr, expr, ...} *)
+    | BinOp of binop * expr * expr (** expr binop expr *)
+    | UnOp of unop * expr (** unop expr*)
+    | ExprApply of apply (** expr(expr, ..., expr) *)
   [@@deriving show { with_path = false }]
 
-  and apply = LuaCall of expr * expr list (** expr(expr, ..., expr) *)
+  and apply = Call of expr * expr list (** expr(expr, ..., expr) *)
   [@@deriving show { with_path = false }]
 
   and statement =
-    | LuaDo of block (** do sttmn sttmnt end*)
-    | LuaSet of lvalue list * expr list (** a, b, c = d, e, f*)
-    | LuaWhile of expr * block (** while expr do block*)
-    | LuaRepeat of block * expr (** repeat block until expr *)
-    | LuaIf of expr * block * elseif_block list * block option
+    | Do of block (** do sttmn sttmnt end*)
+    | Set of lvalue list * expr list (** a, b, c = d, e, f*)
+    | While of expr * block (** while expr do block*)
+    | Repeat of block * expr (** repeat block until expr *)
+    | If of expr * block * elseif_block list * block option
         (** if expr then block [elseif block] else block end*)
-    | LuaFornum of ident * expr * expr * expr option * block
+    | Fornum of ident * expr * expr * expr option * block
         (** for var = expr, expr, ?expr, block *)
-    | LuaForin of ident list * expr list * block
+    | Forin of ident list * expr list * block
         (** for expr, expr, ... in expr, expr, ... do block *)
-    | LuaLocal of ident list * expr list (** local a = ?expr *)
-    | LuaReturn of expr option (** return expr *)
-    | LuaBreak (** break *)
-    | LuaStatementApply of apply (** just a fun call, needed because of side effects  *)
-    | LuaFunctionDeclare of lvalue * ident list * block (** function name(args) body end*)
-    | LuaExpr of expr (** just an expression, will be printed, for REPL *)
+    | Local of ident list * expr list (** local a = ?expr *)
+    | Return of expr option (** return expr *)
+    | Break (** break *)
+    | StatementApply of apply (** just a fun call, needed because of side effects  *)
+    | FunctionDeclare of lvalue * ident list * block (** function name(args) body end*)
+    | Expr of expr (** just an expression, will be printed, for REPL *)
   [@@deriving show { with_path = false }]
 
   and lvalue =
