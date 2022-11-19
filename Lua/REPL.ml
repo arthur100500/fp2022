@@ -22,12 +22,9 @@ let run_from_string code ctx =
        then print_endline (Printf.sprintf "Parsed ast for input: %s" (Ast.show_ast h))
        else ();
        (match Interpreter.interpret h ctx with
-        | Interpreter.Interpreted nctx -> nctx
-        | Error m ->
+        | Interpreter.Done nctx -> nctx
+        | Fail m ->
           print_endline (Printf.sprintf "Interpreter failed with message: %s" m);
-          ctx
-        | _ ->
-          print_endline "Something strange, returning or breaking still..";
           ctx)
      | t ->
        print_endline (Printf.sprintf "Parser failed and it is unparsed: %s" t);

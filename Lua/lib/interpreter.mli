@@ -5,12 +5,10 @@
 module Interpreter : sig
   type context
 
-  type interpreter_result =
-    | Interpreted of context
-    | Error of string
-    | Returning of context
-    | Breaking of context
+  type result =
+    | Done of context
+    | Fail of string
 
-  val interpret : Ast.Ast.ast -> context -> interpreter_result
+  val interpret : Ast.Ast.ast -> context -> result
   val emptyctx : context
 end

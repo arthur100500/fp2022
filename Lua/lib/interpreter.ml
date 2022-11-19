@@ -7,13 +7,11 @@ open Ast
 module Interpreter : sig
   type context
 
-  type interpreter_result =
-    | Interpreted of context
-    | Error of string
-    | Returning of context
-    | Breaking of context
+  type result =
+    | Done of context
+    | Fail of string
 
-  val interpret : Ast.ast -> context -> interpreter_result
+  val interpret : Ast.ast -> context -> result
   val emptyctx : context
 end = struct
   include Ast
@@ -122,6 +120,10 @@ end = struct
     | Error of string
     | Returning of context
     | Breaking of context
+
+  type result =
+    | Done of context
+    | Fail of string
 
   type interpreter = context -> interpreter_result
 
@@ -587,5 +589,11 @@ end = struct
     }
   ;;
 
-  let interpret ast = exec_many ast
+  let interpret ast ctx =
+    match exec_many ast ctx with
+    | Error m -> Fail m
+    | Interpreted m -> Done m
+    | Breaking _ -> Fail "Breaking outside a loop"
+    | Returning _ -> Fail "Returning outside a function"
+  ;;
 end
