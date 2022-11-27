@@ -136,10 +136,9 @@ end = struct
     | e -> e
  ;;
 
-  (** will pass f c as a continuation for p1 *)
   let ( >>>= ) : (interpreter -> interpreter) -> (context -> interpreter) -> interpreter =
    fun i f c ->
-    match i (f c) c with
+    match i (return c) c with
     | Interpreted c2 -> f c2 c2
     | e -> e
  ;;
@@ -514,8 +513,7 @@ end = struct
          | Interpreted nctx ->
            let next_res = indexes_to_list p nctx in
            let e1, e2, e3 = next_res in
-           e1, nctx.last_exec :: e2, e3
-         | _ -> "", [], Error "Breaking or returning still..")
+           e1, nctx.last_exec :: e2, e3)
       | Ident i -> i, [], Interpreted ctx
     in
     let replace_index index ctx =
