@@ -22,8 +22,8 @@ let run_from_string code ctx =
        then print_endline (Printf.sprintf "Parsed ast for input: %s" (Ast.show_ast h))
        else ();
        (match Interpreter.interpret h ctx with
-        | Interpreter.Done nctx -> nctx
-        | Fail m ->
+        | Interpreted nctx -> print_endline (Interpreter.show_context nctx);nctx
+        | Error m ->
           print_endline (Printf.sprintf "Interpreter failed with message: %s" m);
           ctx)
      | t ->

@@ -4,16 +4,7 @@
 
 open Ast
 
-module Interpreter : sig
-  type context
-
-  type result =
-    | Done of context
-    | Fail of string
-
-  val interpret : Ast.ast -> context -> result
-  val emptyctx : context
-end = struct
+module Interpreter = struct
   include Ast
   include Parser
 
@@ -119,10 +110,6 @@ end = struct
     | Interpreted of context (** Normal interpretation result*)
     | Error of string (** Failed interpretation result*)
 
-  and result =
-    | Done of context
-    | Fail of string
-
   and interpreter = context -> interpreter_result
 
   let show_context x = Format.asprintf "%a" pp_context x
@@ -136,12 +123,8 @@ end = struct
     | e -> e
  ;;
 
-  let ( >>>= ) : (interpreter -> interpreter) -> (context -> interpreter) -> interpreter =
-   fun i f c ->
-    match i (return c) c with
-    | Interpreted c2 -> f c2 c2
-    | e -> e
- ;;
+ let ( *> ) : interpreter -> interpreter -> interpreter =
+   fun i1 i2 -> i1 >>= fun _ -> i2
 
   let return_le res ctx = return { ctx with last_exec = res }
 
@@ -154,58 +137,17 @@ end = struct
   ;;
 
   let rec exec_expr ex cont ctx =
-    match ex with
-    | Const c -> return_le (Const.from_const c) ctx ctx
-    | Variable v -> (get_var v (Some ctx)) ctx ctx
-    | TableGet (t, i) -> get_from_table ctx t i
-    | TableInit el -> create_table ctx el ctx
-    | UnOp (op, le) -> exec_un_op op le ctx
-    | BinOp (op, le, re) -> exec_bin_op op le re ctx
-    | ExprApply apply -> exec_fun apply cont ctx ctx
+    (match ex with
+     | Const c -> return_le (Const.from_const c) ctx >>= cont
+     | Variable v -> (get_var v (Some ctx)) ctx >>=cont
+     | TableGet (t, i) -> get_from_table ctx t i >>=cont
+     | TableInit el -> create_table ctx el >>=cont
+     | UnOp (op, le) -> exec_un_op op le >>=cont
+     | BinOp (op, le, re) -> exec_bin_op op le re>>=cont
+     | ExprApply apply -> exec_fun apply cont ctx)
+      ctx
 
-  and exec_fun apply cont ctx =
-    (* Hardcoded functions *)
-    let rec print_vars exprs ctx =
-      match exprs with
-      | [] -> return ctx
-      | h :: t ->
-        exec_expr h
-        >>>= fun h_res ->
-        (match h_res.last_exec with
-         | String s -> print_string s
-         | Number n -> print_float n
-         | Function _ -> print_string "<function>"
-         | Nil -> print_string "nil"
-         | Bool v -> print_string (if v then "true" else "false")
-         | tbl -> print_string (Const.show tbl));
-        print_endline "";
-        print_vars t h_res
-    in
-    match apply with
-    | Call (fn, args) ->
-      (* Hardcoded functions *)
-      (match fn with
-       | Variable "print" -> print_vars args ctx
-       | Variable "pctx" ->
-         print_endline (show_context ctx);
-         return ctx
-       | _ ->
-         exec_expr fn
-         >>>= fun expr_e ->
-         return
-           { ctx with
-             ret = Some ctx.level
-           ; vars = VarsMap.empty
-           ; previous = Some ctx
-           ; last_exec = Nil
-           ; level = ctx.level + 1
-           ; ret_cont = cont
-           }
-         >>= fun _ ->
-         (match expr_e.last_exec with
-          | Function (idents, body) ->
-            exec_local_set idents args >>= fun _ -> exec_many body
-          | _ -> error "You can only call functions"))
+  and exec_fun _ cont _ = error "Not done" >>= cont
 
   and exec_un_op op le =
     let exec_bool_uop op last_ctx = function
@@ -217,7 +159,7 @@ end = struct
       | _ -> error "Attempt to do math with non numbers"
     in
     exec_expr le
-    >>>= fun ler ->
+    @@ fun ler ->
     match op with
     | Not -> exec_bool_uop not ler ler.last_exec
     | USub -> exec_num_uop (fun x -> 0. -. x) ler ler.last_exec
@@ -244,9 +186,9 @@ end = struct
        | x, y -> return { last_ctx with last_exec = Bool (op x y) }
      in
      exec_expr le
-     >>>= fun le_e ->
+     @@ fun le_e ->
      exec_expr re
-     >>>= fun re_e ->
+     @@ fun re_e ->
      let ler = le_e.last_exec in
      let rer = re_e.last_exec in
      match op with
@@ -282,17 +224,16 @@ end = struct
       ctx
 
   and get_from_table ctx t i =
-    (exec_expr t
-    >>>= fun t_e ->
+    exec_expr t
+    @@ fun t_e ->
     exec_expr i
-    >>>= fun i_e ->
+    @@ fun i_e ->
     match t_e.last_exec with
     | Table ht ->
       (match TableMap.find_opt i_e.last_exec ht with
        | Some v -> return { ctx with last_exec = v }
        | None -> return { ctx with last_exec = Nil })
-    | _ -> error "Taking index from non table")
-      ctx
+    | _ -> error "Taking index from non table"
 
   and create_table ctx kvp_e_list =
     let ht = TableMap.empty in
@@ -302,13 +243,13 @@ end = struct
         (match h with
          | PairExpr (k, v) ->
            exec_expr k
-           >>>= fun k_e ->
+           @@ fun k_e ->
            exec_expr v
-           >>>= fun v_e ->
+           @@ fun v_e ->
            add_kvp (TableMap.replace k_e.last_exec v_e.last_exec tbl) v_e li t
          | JustExpr v ->
            exec_expr v
-           >>>= fun v_e ->
+           @@ fun v_e ->
            add_kvp (TableMap.replace (Number li) v_e.last_exec tbl) v_e (li +. 1.) t)
     in
     add_kvp ht ctx 1. kvp_e_list
@@ -340,13 +281,13 @@ end = struct
       ; brk = Some ctx.level
       ; last_exec = Nil
       ; level = ctx.level + 1
-      ; brk_cont = cont
+      ; brk_cont = cont ctx
       }
 
   and exec_local_set idents exprs ctx =
     let set_ident id ex ctx =
       (exec_expr ex
-      >>>= fun ex_ctx ->
+      @@ fun ex_ctx ->
       return { ex_ctx with vars = VarsMap.replace id ex_ctx.last_exec ex_ctx.vars })
         ctx
     in
@@ -360,33 +301,35 @@ end = struct
     helper ctx (idents, exprs) ctx
 
   and exec_stat stat cont ctx =
-    match stat with
-    | Expr expr -> exec_stat (StatementApply (Call (Variable "print", [ expr ]))) cont ctx
-    | Set (le, re) -> exec_set le re ctx
-    | Local (ids, exps) -> exec_local_set ids exps ctx
-    | Do block -> exec_up_ctx (exec_many block) ctx
-    | If (ifexpr, block, elseif_blocks, else_block) ->
-      exec_up_ctx (exec_if ifexpr block elseif_blocks else_block) ctx
-    | StatementApply apply -> exec_expr (ExprApply apply) cont ctx
-    | Return ex -> exec_return ex ctx
-    | FunctionDeclare (id, ids, blk) -> exec_set_one id (Const.Function (ids, blk)) ctx
-    | Break -> exec_break ctx
-    | While (ex, blck) -> exec_loop_ctx (exec_while ex blck) cont ctx
-    | Repeat (blck, ex) -> exec_loop_ctx (exec_until blck ex) cont ctx
-    | Fornum (ident, st, en, step, blck) ->
-      exec_loop_ctx (exec_for_num ident st en step blck) cont ctx
-    | Forin (_, _, _) -> error "For in loop is not implemented yet =( " ctx
+    (match stat with
+     | Expr expr -> exec_stat (StatementApply (Call (Variable "print", [ expr ]))) cont
+     | Set (le, re) -> exec_set le re >>= cont
+     | Local (ids, exps) -> exec_local_set ids exps >>= cont
+     | Do block -> exec_up_ctx (exec_many block)
+     | If (ifexpr, block, elseif_blocks, else_block) ->
+       exec_up_ctx (exec_if ifexpr block elseif_blocks else_block) >>= cont
+     | StatementApply apply -> exec_expr (ExprApply apply) cont
+     | Return ex -> exec_return ex
+     | FunctionDeclare (id, ids, blk) ->
+       exec_set_one id (Const.Function (ids, blk)) >>= cont
+     | Break -> exec_break
+     | While (ex, blck) -> exec_loop_ctx (exec_while ex blck) cont
+     | Repeat (blck, ex) -> exec_loop_ctx (exec_until blck ex) cont
+     | Fornum (ident, st, en, step, blck) ->
+       exec_loop_ctx (exec_for_num ident st en step blck) cont
+     | Forin (_, _, _) -> error "For in loop is not implemented yet =( ")
+      ctx
 
   and exec_for_num id bg ed st blck =
     exec_expr bg
-    >>>= fun loop_begin ->
+    @@ fun loop_begin ->
     exec_expr ed
-    >>>= fun loop_end ->
+    @@ fun loop_end ->
     exec_expr
       (match st with
        | Some s -> s
        | None -> Const (Number 1.))
-    >>>= fun loop_step ->
+    @@ fun loop_step ->
     match loop_begin.last_exec, loop_end.last_exec, loop_step.last_exec with
     | Number lbegin, Number lend, Number lstep ->
       let rec loop_iter iter ctx =
@@ -403,7 +346,7 @@ end = struct
 
   and exec_while ex blck =
     exec_expr ex
-    >>>= fun ctx_e ->
+    @@ fun ctx_e ->
     match get_bool ctx_e.last_exec with
     | true -> exec_many blck >>= fun _ -> exec_while ex blck
     | false -> return ctx_e
@@ -412,7 +355,7 @@ end = struct
     exec_many blck
     >>= fun _ ->
     exec_expr ex
-    >>>= fun ctx_e ->
+    @@ fun ctx_e ->
     match get_bool ctx_e.last_exec with
     | true -> exec_until blck ex
     | false -> return ctx_e
@@ -432,25 +375,8 @@ end = struct
     | Some lvl -> find_ctx lvl ctx
     | None -> Error "Breaking outside a loop"
 
-  and exec_return ex =
-    exec_expr
-      (match ex with
-       | Some e -> e
-       | None -> Const Nil)
-    >>>= fun ctx ->
-    let rec find_ctx lvl c =
-      if c.level = lvl
-      then ctx.ret_cont { c with last_exec = ctx.last_exec }
-      else if c.level < lvl
-      then Error "Returning outside a function"
-      else (
-        match c.previous with
-        | Some p -> find_ctx lvl p
-        | None -> Error "Trying to exit global context")
-    in
-    match ctx.ret with
-    | Some lvl -> fun _ -> find_ctx lvl ctx
-    | None -> error "Returning outside a function"
+  and exec_return _ =
+    error "Return is now not supported"    
 
   and get_bool = function
     | Bool false | Nil -> false
@@ -458,7 +384,7 @@ end = struct
 
   and exec_if iex blck elseifs elseblck =
     exec_expr iex
-    >>>= fun if_ex_res ->
+    @@ fun if_ex_res ->
     match get_bool if_ex_res.last_exec with
     | true -> exec_many blck
     | _ ->
@@ -476,7 +402,7 @@ end = struct
       match cl, rl with
       | ch :: ct, rh :: rt ->
         exec_expr rh
-        >>>= fun rhr -> exec_set_one ch rhr.last_exec >>= fun nctx -> helper ct rt nctx
+        @@ fun rhr -> exec_set_one ch rhr.last_exec >>= fun nctx -> helper ct rt nctx
       | ch :: ct, [] -> exec_set_one ch Nil >>= fun nctx -> helper ct rl nctx
       | [], _ -> return ctx
     in
@@ -508,7 +434,7 @@ end = struct
     let rec indexes_to_list index ctx =
       match index with
       | Index (p, i) ->
-        (match exec_expr i (fun c -> return c c) ctx with
+        (match exec_expr i return ctx with
          | Error m -> "", [], Error m
          | Interpreted nctx ->
            let next_res = indexes_to_list p nctx in
@@ -554,7 +480,7 @@ end = struct
   and exec_many stmnts ctx =
     match stmnts with
     | [] -> Interpreted ctx
-    | h :: t -> (exec_stat h (exec_many t) >>= fun _ -> exec_many t) ctx
+    | h :: t -> (exec_stat h (fun _ -> exec_many t)) ctx
   ;;
 
   let emptyctx =
@@ -569,9 +495,5 @@ end = struct
     }
   ;;
 
-  let interpret ast ctx =
-    match exec_many ast ctx with
-    | Error m -> Fail m
-    | Interpreted m -> Done m
-  ;;
+  let interpret ast ctx = exec_many ast ctx 
 end
