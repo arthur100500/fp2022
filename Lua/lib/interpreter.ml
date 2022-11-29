@@ -101,14 +101,14 @@ module Interpreter = struct
     ; brk : int option
     ; ret : int option
     ; level : int
-    ; ret_cont : interpreter
+    ; ret_cont : context -> interpreter
     ; brk_cont : interpreter
     }
   [@@deriving show { with_path = false }]
 
   and interpreter_result =
-    | Interpreted of context (** Normal interpretation result*)
-    | Error of string (** Failed interpretation result*)
+    | Interpreted of context
+    | Error of string
 
   and interpreter = context -> interpreter_result
 
@@ -123,9 +123,7 @@ module Interpreter = struct
     | e -> e
  ;;
 
- let ( *> ) : interpreter -> interpreter -> interpreter =
-   fun i1 i2 -> i1 >>= fun _ -> i2
-
+  let ( *> ) : interpreter -> interpreter -> interpreter = fun i1 i2 -> i1 >>= fun _ -> i2
   let return_le res ctx = return { ctx with last_exec = res }
 
   let rec get_var varname = function
@@ -139,15 +137,59 @@ module Interpreter = struct
   let rec exec_expr ex cont ctx =
     (match ex with
      | Const c -> return_le (Const.from_const c) ctx >>= cont
-     | Variable v -> (get_var v (Some ctx)) ctx >>=cont
-     | TableGet (t, i) -> get_from_table ctx t i >>=cont
-     | TableInit el -> create_table ctx el >>=cont
-     | UnOp (op, le) -> exec_un_op op le >>=cont
-     | BinOp (op, le, re) -> exec_bin_op op le re>>=cont
+     | Variable v -> (get_var v (Some ctx)) ctx >>= cont
+     | TableGet (t, i) -> get_from_table ctx t i >>= cont
+     | TableInit el -> create_table ctx el >>= cont
+     | UnOp (op, le) -> exec_un_op op le >>= cont
+     | BinOp (op, le, re) -> exec_bin_op op le re >>= cont
      | ExprApply apply -> exec_fun apply cont ctx)
       ctx
 
-  and exec_fun _ cont _ = error "Not done" >>= cont
+  and exec_fun apply cont ctx =
+    let rec print_vars exprs ctx =
+      match exprs with
+      | [] -> return ctx
+      | h :: t ->
+        exec_expr h
+        @@ fun h_res ->
+        (match h_res.last_exec with
+         | String s -> print_string s
+         | Number n -> print_float n
+         | Function _ -> print_string "<function>"
+         | Nil -> print_string "nil"
+         | Bool v -> print_string (if v then "true" else "false")
+         | tbl -> print_string (Const.show tbl));
+        print_endline "";
+        print_vars t h_res
+    in
+    match apply with
+    | Call (fn, args) ->
+      exec_expr fn
+      @@ fun fn_ctx ->
+      let down_cont c =
+        let () = print_endline (Format.sprintf "|||||||| > LEVEL > %d" c.level) in
+        match c.previous with
+        | None -> error "Exit from global context (1)"
+        | Some cp -> cont cp
+      in
+      return
+        { ctx with
+          ret = Some ctx.level
+        ; vars = VarsMap.empty
+        ; previous = Some {ctx with ret_cont = cont}
+        ; last_exec = Nil
+        ; level = ctx.level + 1
+        ; ret_cont = cont
+        }
+      *>
+      (match fn_ctx.last_exec with
+       | _ when fn = Variable "print" -> print_vars args fn_ctx
+       | _ when fn = Variable "pctx" ->
+         print_endline (show_context ctx);
+         cont ctx
+       | Function (idents, body) ->
+         exec_local_set idents args >>= fun c -> exec_many body down_cont c
+       | _ -> error "You can only call functions")
 
   and exec_un_op op le =
     let exec_bool_uop op last_ctx = function
@@ -305,9 +347,9 @@ module Interpreter = struct
      | Expr expr -> exec_stat (StatementApply (Call (Variable "print", [ expr ]))) cont
      | Set (le, re) -> exec_set le re >>= cont
      | Local (ids, exps) -> exec_local_set ids exps >>= cont
-     | Do block -> exec_up_ctx (exec_many block)
+     | Do block -> exec_up_ctx (exec_many block cont ctx)
      | If (ifexpr, block, elseif_blocks, else_block) ->
-       exec_up_ctx (exec_if ifexpr block elseif_blocks else_block) >>= cont
+       exec_up_ctx (exec_if ifexpr block elseif_blocks else_block cont)
      | StatementApply apply -> exec_expr (ExprApply apply) cont
      | Return ex -> exec_return ex
      | FunctionDeclare (id, ids, blk) ->
@@ -316,11 +358,11 @@ module Interpreter = struct
      | While (ex, blck) -> exec_loop_ctx (exec_while ex blck) cont
      | Repeat (blck, ex) -> exec_loop_ctx (exec_until blck ex) cont
      | Fornum (ident, st, en, step, blck) ->
-       exec_loop_ctx (exec_for_num ident st en step blck) cont
+       exec_loop_ctx (exec_for_num ident st en step blck cont) cont
      | Forin (_, _, _) -> error "For in loop is not implemented yet =( ")
       ctx
 
-  and exec_for_num id bg ed st blck =
+  and exec_for_num id bg ed st blck cont =
     exec_expr bg
     @@ fun loop_begin ->
     exec_expr ed
@@ -339,26 +381,14 @@ module Interpreter = struct
         | false -> return ctx
         | true ->
           exec_local_set [ id ] [ Const (Number (lbegin +. (iter *. lstep))) ]
-          >>= fun _ -> exec_many blck >>= fun nctx -> loop_iter (iter +. 1.) nctx
+          >>= fun _ ->
+          exec_many blck cont loop_end >>= fun nctx -> loop_iter (iter +. 1.) nctx
       in
       loop_iter 0. loop_step
     | _, _, _ -> error "End, begin and step of the loop must be numbers"
 
-  and exec_while ex blck =
-    exec_expr ex
-    @@ fun ctx_e ->
-    match get_bool ctx_e.last_exec with
-    | true -> exec_many blck >>= fun _ -> exec_while ex blck
-    | false -> return ctx_e
-
-  and exec_until blck ex =
-    exec_many blck
-    >>= fun _ ->
-    exec_expr ex
-    @@ fun ctx_e ->
-    match get_bool ctx_e.last_exec with
-    | true -> exec_until blck ex
-    | false -> return ctx_e
+  and exec_while ex blck = error "Does not work"
+  and exec_until blck ex = error "Does not work"
 
   and exec_break ctx =
     let rec find_ctx lvl c =
@@ -375,27 +405,44 @@ module Interpreter = struct
     | Some lvl -> find_ctx lvl ctx
     | None -> Error "Breaking outside a loop"
 
-  and exec_return _ =
-    error "Return is now not supported"    
+  and exec_return ex =
+    exec_expr
+      (match ex with
+       | Some e -> e
+       | None -> Const Nil)
+    @@ fun ctx ->
+    let rec find_ctx lvl c =
+      if c.level = lvl
+      then c.ret_cont { c with last_exec = ctx.last_exec }
+      else if c.level < lvl
+      then error "Returning outside a function"
+      else (
+        match c.previous with
+        | Some p -> find_ctx lvl p
+        | None -> error "Trying to exit global context (2)")
+    in
+    match ctx.ret with
+    | Some lvl -> find_ctx lvl ctx
+    | None -> error "Returning outside a function"
 
   and get_bool = function
     | Bool false | Nil -> false
     | _ -> true
 
-  and exec_if iex blck elseifs elseblck =
+  and exec_if iex blck elseifs elseblck cont =
     exec_expr iex
     @@ fun if_ex_res ->
     match get_bool if_ex_res.last_exec with
-    | true -> exec_many blck
+    | true -> exec_many blck cont if_ex_res
     | _ ->
       (match elseifs with
        | [] ->
          (match elseblck with
-          | Some sttmnts -> exec_many sttmnts
-          | None -> exec_many [])
+          | Some sttmnts -> exec_many sttmnts cont if_ex_res
+          | None -> exec_many [] cont if_ex_res)
        | h :: t ->
          (match h with
-          | iex, blck -> exec_if iex blck t elseblck))
+          | iex, blck -> exec_if iex blck t elseblck cont))
 
   and exec_set ce re ctx =
     let rec helper cl rl ctx =
@@ -477,10 +524,10 @@ module Interpreter = struct
     | Ident ident -> Interpreted (replace_ident ident ctx)
     | index -> replace_index index ctx
 
-  and exec_many stmnts ctx =
+  and exec_many stmnts cont ctx =
     match stmnts with
-    | [] -> Interpreted ctx
-    | h :: t -> (exec_stat h (fun _ -> exec_many t)) ctx
+    | [] -> cont ctx
+    | h :: t -> exec_stat h (exec_many t cont)
   ;;
 
   let emptyctx =
@@ -490,10 +537,10 @@ module Interpreter = struct
     ; ret = None
     ; brk = None
     ; level = 0
-    ; ret_cont = error "Exit from global context"
+    ; ret_cont = (fun _ -> error "Exit from global context")
     ; brk_cont = error "Exit from global context"
     }
   ;;
 
-  let interpret ast ctx = exec_many ast ctx 
+  let interpret ast ctx = exec_many ast return ctx ctx
 end
