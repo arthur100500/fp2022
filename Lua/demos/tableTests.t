@@ -34,12 +34,12 @@
   ok
   Interpreter failed with message: Attempt to index non table
   $ ./demoInterp.exe <<-EOF
+  > -- In lua and in the initial implementation these were Hash tables
   > print("Non-recursive table")
   > t = {}
   > t.a = t
   > t.a = t
   > t.a = t
   > print(t)
-  Assign error test
-  ok
-  Interpreter failed with message: Attempt to index non table
+  Non-recursive table
+  {"a": {"a": {"a": {}}}}
