@@ -88,3 +88,23 @@
   Function local
   2.
   1.
+  $ ./demoInterp.exe <<-EOF
+  > a = 1
+  > b = 2
+  > print("Function in function local")
+  > function f(x)
+  >   local a = x
+  >   local b = x
+  >   function f_inner(x)
+  >     local a = x + 1
+  >     print(a)
+  >   end
+  >   f_inner(a)
+  >   return a
+  > end
+  > print(f(b))
+  > print(a)
+  Function local
+  3.
+  2.
+  1.
