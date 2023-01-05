@@ -56,6 +56,7 @@ end = struct
     val replace : Const.t -> Const.t -> t -> t
     val find_opt : Const.t -> t -> Const.t option
     val compare : t -> t -> int
+    val iter : (Const.t -> Const.t -> unit) -> t -> unit
   end = struct
     include Ast
 
@@ -81,6 +82,7 @@ end = struct
     let remove = M.remove
     let replace k v tbl = M.update k (fun _ -> Some v) tbl
     let find_opt = M.find_opt
+    let iter = M.iter
   end
 
   module VarsMap : sig
@@ -167,13 +169,24 @@ end = struct
       | h :: t ->
         exec_expr h
         >>= fun h_res ->
-        (match h_res.last_exec with
-         | String s -> print_string s
-         | Number n -> print_float n
-         | Function _ -> print_string "<function>"
-         | Nil -> print_string "nil"
-         | Bool v -> print_string (if v then "true" else "false")
-         | tbl -> print_string (Const.show tbl));
+        let rec print_val = function
+          | Const.String s -> print_string s
+          | Number n -> print_float n
+          | Function _ -> print_string "<function>"
+          | Nil -> print_string "nil"
+          | Bool v -> print_string (if v then "true" else "false")
+          | Table tbl ->
+            let print_tbl k v =
+              print_string "\"";
+              print_val k;
+              print_string "\": ";
+              print_val v
+            in
+            print_string "{";
+            TableMap.iter print_tbl tbl;
+            print_string "}"
+        in
+        print_val h_res.last_exec;
         print_endline "";
         print_vars t h_res
     in
