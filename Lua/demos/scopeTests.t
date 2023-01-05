@@ -104,7 +104,7 @@
   > end
   > print(f(b))
   > print(a)
-  Function local
+  Function in function local
   3.
   2.
   1.
